@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#123f36">
+    <title>مستحقات برامج الراديو | دار الإفتاء الليبية</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="الرئيسية">
+        <span class="brand-mark" aria-hidden="true">د</span>
+        <span><strong>دار الإفتاء الليبية</strong><small>نظام مستحقات برامج الراديو</small></span>
+      </a>
+      <div id="header-user" class="header-user" hidden></div>
+    </header>
+
+    <main class="page-shell">
+      <section id="auth-view" class="auth-layout">
+        <div class="welcome-panel">
+          <span class="eyebrow">تنظيم أسهل · حساب أوضح</span>
+          <h1>مستحقاتك،<br>محسوبة بدقة.</h1>
+          <p>سجّل مشاركتك في البرنامج، وتابع حالة طلبك. تراجع الإدارة كل تسجيل قبل اعتماده.</p>
+          <div class="rate-preview">
+            <div><span>البرنامج المسجل</span><strong>المقدم 100 د.ل <i>·</i> الشيخ 150 د.ل / ساعة</strong></div>
+            <div><span>البرنامج المباشر</span><strong>المقدم 40 د.ل <i>·</i> الشيخ 75 د.ل / ساعة</strong></div>
+          </div>
+        </div>
+        <div class="auth-card">
+          <div class="tabs" role="tablist" aria-label="تسجيل الدخول أو إنشاء حساب">
+            <button class="tab active" id="login-tab" type="button" role="tab" aria-selected="true">تسجيل الدخول</button>
+            <button class="tab" id="register-tab" type="button" role="tab" aria-selected="false">إنشاء حساب</button>
+          </div>
+          <form id="login-form" class="form-stack">
+            <label>اسم المستخدم<input name="username" autocomplete="username" required></label>
+            <label>كلمة المرور<input name="password" type="password" autocomplete="current-password" required></label>
+            <button class="button primary" type="submit">دخول للحساب</button>
+            <button class="button text-button" id="admin-hint" type="button">دخول الإدارة</button>
+          </form>
+          <form id="register-form" class="form-stack" hidden>
+            <label>الاسم الكامل<input name="name" autocomplete="name" maxlength="80" required></label>
+            <label>رقم الهاتف<input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>
+            <label>اسم المستخدم<input name="username" autocomplete="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9_.-]+" required><small>أحرف إنجليزية أو أرقام، بدون مسافات.</small></label>
+            <label>الصفة
+              <select name="role" required>
+                <option value="presenter">مقدم / مقدمة</option>
+                <option value="sheikh">شيخ</option>
+              </select>
+            </label>
+            <label>كلمة المرور<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+            <button class="button primary" type="submit">إنشاء الحساب</button>
+          </form>
+          <p id="auth-message" class="message" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="member-view" hidden>
+        <div class="page-heading">
+          <div><span class="eyebrow">حساب المشارك</span><h1>أهلاً، <span id="member-name"></span></h1><p>سجّل البرنامج وتابع مستحقاتك.</p></div>
+          <span id="member-role" class="role-badge"></span>
+        </div>
+        <div class="workspace-grid">
+          <section class="panel form-panel">
+            <div class="section-heading"><div><span class="step">١</span><h2>تسجيل مشاركة</h2></div><span class="muted">تُرسل للإدارة للمراجعة</span></div>
+            <form id="entry-form" class="form-stack">
+              <label>اسم البرنامج<input name="programName" maxlength="100" placeholder="مثال: نور على الدرب" required></label>
+              <label id="co-label">اسم الشيخ<input name="coParticipant" maxlength="80" required></label>
+              <div class="form-row">
+                <label>تاريخ البرنامج<input name="date" type="date" required></label>
+                <label>نوع البرنامج<select name="type" required><option value="recorded">مسجل</option><option value="live">مباشر</option></select></label>
+              </div>
+              <label>مدة المشاركة بالدقائق<input name="durationMinutes" type="number" min="1" max="1440" step="1" placeholder="مثال: 30" required><small>نصف ساعة = 30 دقيقة. تُحسب المستحقات تلقائياً.</small></label>
+              <div class="estimate"><span>تقدير المستحق لهذه المشاركة</span><strong id="entry-estimate">— د.ل</strong></div>
+              <button class="button primary" type="submit">إرسال للمراجعة</button>
+              <p id="entry-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="panel entries-panel">
+            <div class="section-heading"><div><span class="step">٢</span><h2>مشاركاتي</h2></div><button class="button subtle" id="refresh-member" type="button">تحديث</button></div>
+            <div id="member-entries" class="entry-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="admin-view" hidden>
+        <div class="page-heading">
+          <div><span class="eyebrow">لوحة الإدارة</span><h1>مراجعة المستحقات</h1><p>راجع التسجيلات، اعتمد المستحقات، وصدّر كشف الحساب.</p></div>
+          <span class="role-badge">الإدارة</span>
+        </div>
+        <section class="panel review-panel">
+          <div class="section-heading"><div><span class="step">١</span><h2>طلبات بانتظار المراجعة</h2></div><button class="button subtle" id="refresh-admin" type="button">تحديث</button></div>
+          <div id="pending-entries" class="table-wrap"></div>
+        </section>
+        <section class="panel report-panel">
+          <div class="section-heading"><div><span class="step">٢</span><h2>كشف المستحقات المعتمدة</h2></div></div>
+          <form id="report-filter" class="filter-row">
+            <label>من تاريخ<input name="from" type="date"></label>
+            <label>إلى تاريخ<input name="to" type="date"></label>
+            <button class="button primary" type="submit">عرض الكشف</button>
+            <button class="button subtle" id="clear-filter" type="button">كل التواريخ</button>
+          </form>
+          <div id="report-summary" class="summary-cards"></div>
+          <div id="report-table" class="table-wrap"></div>
+          <div class="report-actions"><button class="button subtle" id="export-csv" type="button">تصدير إلى Excel</button><button class="button primary" id="print-report" type="button">طباعة الكشف</button></div>
+          <p id="admin-message" class="message" role="status" aria-live="polite"></p>
+        </section>
+      </section>
+    </main>
+    <footer>دار الإفتاء الليبية <span>·</span> نظام تنظيم مستحقات برامج الراديو</footer>
+  </body>
+</html>

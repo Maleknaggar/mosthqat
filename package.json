@@ -1,0 +1,12 @@
+{
+  "name": "dar-al-ifta-radio-dues",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Radio program dues registration and administration",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

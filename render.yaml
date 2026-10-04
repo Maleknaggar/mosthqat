@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: dar-al-ifta-radio-dues
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/config
+    envVars:
+      - key: ADMIN_USERNAME
+        value: MALEK
+      - key: ADMIN_PASSWORD
+        sync: false
