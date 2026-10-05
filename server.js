@@ -21,6 +21,7 @@ const MIME_TYPES = {
   "/": "text/html; charset=utf-8",
   "/styles.css": "text/css; charset=utf-8",
   "/app.js": "text/javascript; charset=utf-8",
+  "/logo.png": "image/png",
 };
 const sessions = new Map();
 let store = { users: [], entries: [] };
@@ -373,7 +374,7 @@ async function handleApi(req, res, url) {
 
 async function serveStatic(res, pathname) {
   const fileName = pathname === "/" ? "index.html" : pathname.slice(1);
-  if (!["index.html", "styles.css", "app.js"].includes(fileName)) {
+  if (!["index.html", "styles.css", "app.js", "logo.png"].includes(fileName)) {
     sendJson(res, 404, { error: "الصفحة غير موجودة." });
     return;
   }
