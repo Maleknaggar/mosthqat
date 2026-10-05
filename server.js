@@ -24,7 +24,7 @@ const MIME_TYPES = {
   "/logo.png": "image/png",
 };
 const sessions = new Map();
-let store = { users: [], entries: [] };
+let store = { users: [], entries: [], programs: [] };
 let saveQueue = Promise.resolve();
 
 function sendJson(res, status, body, extraHeaders = {}) {
@@ -145,26 +145,32 @@ function isValidDate(value) {
 
 function entryForResponse(entry) {
   const user = store.users.find((person) => person.id === entry.userId);
+  const reviewer = store.users.find((person) => person.id === entry.reviewedBy);
   return {
     ...entry,
     name: user?.name || "حساب محذوف",
     username: user?.username || "",
+    reviewerName: entry.reviewedBy === "admin" ? "الإدارة العليا" : entry.reviewedByName || reviewer?.name || "",
     amount: entryAmount(entry),
+    hourlyRate: entryAmount({ ...entry, durationMinutes: 60 }),
   };
 }
 
-function requireAdmin(req, res) {
+function requireRole(req, res, roles) {
   const user = sessionUser(req);
   if (!user) {
     sendJson(res, 401, { error: "سجّل الدخول أولاً." });
     return false;
   }
-  if (user.role !== "admin") {
-    sendJson(res, 403, { error: "هذه الصفحة للإدارة فقط." });
+  if (!roles.includes(user.role)) {
+    sendJson(res, 403, { error: "ليست لديك صلاحية لتنفيذ هذا الإجراء." });
     return false;
   }
   return true;
 }
+
+const requireAdmin = (req, res) => requireRole(req, res, ["admin"]);
+const requireReviewer = (req, res) => requireRole(req, res, ["admin", "monitor"]);
 
 async function handleApi(req, res, url) {
   const route = url.pathname;
@@ -186,7 +192,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && route === "/api/config") {
-    sendJson(res, 200, { adminUsername: ADMIN_USERNAME });
+    sendJson(res, 200, {
+      adminUsername: ADMIN_USERNAME,
+      programs: store.programs.filter((program) => program.active),
+    });
     return;
   }
 
@@ -234,7 +243,7 @@ async function handleApi(req, res, url) {
     const password = typeof body.password === "string" ? body.password : "";
     let user;
     if (username === ADMIN_USERNAME && await verifyAdminPassword(password)) {
-      user = { id: "admin", name: "الإدارة", username: ADMIN_USERNAME, role: "admin" };
+      user = { id: "admin", name: ADMIN_USERNAME.toUpperCase(), username: ADMIN_USERNAME, role: "admin" };
     } else {
       const account = store.users.find((person) => person.username === username);
       if (account && await verifyPassword(password, account)) {
@@ -266,10 +275,29 @@ async function handleApi(req, res, url) {
       sendJson(res, 401, { error: "سجّل الدخول أولاً." });
       return;
     }
-    const entries = user.role === "admin"
+    const month = url.searchParams.get("month") || "";
+    if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      sendJson(res, 400, { error: "صيغة الشهر غير صحيحة." });
+      return;
+    }
+    const entries = ["admin", "monitor"].includes(user.role)
       ? store.entries
       : store.entries.filter((entry) => entry.userId === user.id);
-    sendJson(res, 200, { entries: entries.map(entryForResponse).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)) });
+    sendJson(res, 200, {
+      entries: entries
+        .filter((entry) => !month || entry.date.startsWith(month))
+        .map(entryForResponse)
+        .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)),
+    });
+    return;
+  }
+
+  if (req.method === "GET" && route === "/api/programs") {
+    if (!sessionUser(req)) {
+      sendJson(res, 401, { error: "سجّل الدخول أولاً." });
+      return;
+    }
+    sendJson(res, 200, { programs: store.programs.filter((program) => program.active).sort((a, b) => a.name.localeCompare(b.name, "ar")) });
     return;
   }
 
@@ -279,25 +307,26 @@ async function handleApi(req, res, url) {
       sendJson(res, 401, { error: "سجّل الدخول أولاً." });
       return;
     }
-    if (user.role === "admin") {
-      sendJson(res, 403, { error: "استخدم حساب مقدم أو شيخ لإرسال طلب." });
+    if (!["presenter", "sheikh"].includes(user.role)) {
+      sendJson(res, 403, { error: "تسجيل المشاركات متاح للمقدمين والشيوخ فقط." });
       return;
     }
     const body = await readJson(req);
-    const programName = cleanText(body.programName, 100);
+    const program = store.programs.find((item) => item.id === body.programId && item.active);
     const coParticipant = cleanText(body.coParticipant, 80);
     const date = cleanText(body.date, 10);
     const durationMinutes = Number(body.durationMinutes);
     const type = body.type;
-    if (!programName || !coParticipant || !isValidDate(date) || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440 || !["live", "recorded"].includes(type)) {
-      sendJson(res, 400, { error: "تحقق من اسم البرنامج، الطرف الآخر، التاريخ، نوع البرنامج والمدة بالدقائق (من 1 إلى 1440)." });
+    if (!program || !coParticipant || !isValidDate(date) || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440 || !["live", "recorded"].includes(type)) {
+      sendJson(res, 400, { error: "تحقق من البرنامج والطرف الآخر والتاريخ ونوع البرنامج والمدة." });
       return;
     }
     const entry = {
       id: randomBytes(16).toString("hex"),
       userId: user.id,
       role: user.role,
-      programName,
+      programId: program.id,
+      programName: program.name,
       coParticipant,
       date,
       durationMinutes,
@@ -313,18 +342,20 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && route === "/api/admin/report") {
     if (!requireAdmin(req, res)) return;
-    const from = url.searchParams.get("from") || "";
-    const to = url.searchParams.get("to") || "";
-    if ((from && !isValidDate(from)) || (to && !isValidDate(to))) {
-      sendJson(res, 400, { error: "صيغة التاريخ غير صحيحة." });
+    const month = url.searchParams.get("month") || "";
+    const userId = url.searchParams.get("userId") || "";
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      sendJson(res, 400, { error: "اختر شهراً صحيحاً للكشف." });
       return;
     }
     const entries = store.entries
       .filter((entry) => entry.status === "approved")
-      .filter((entry) => (!from || entry.date >= from) && (!to || entry.date <= to))
+      .filter((entry) => entry.date.startsWith(month))
+      .filter((entry) => !userId || entry.userId === userId)
       .map(entryForResponse)
       .sort((a, b) => a.name.localeCompare(b.name, "ar") || a.date.localeCompare(b.date));
     const totals = new Map();
+    const programTotals = new Map();
     for (const entry of entries) {
       const current = totals.get(entry.userId) || {
         userId: entry.userId,
@@ -337,17 +368,106 @@ async function handleApi(req, res, url) {
       current.count += 1;
       current.amount = Math.round((current.amount + entry.amount + Number.EPSILON) * 100) / 100;
       totals.set(entry.userId, current);
+      const programKey = `${entry.userId}:${entry.programId || entry.programName}`;
+      const programTotal = programTotals.get(programKey) || {
+        userId: entry.userId,
+        name: entry.name,
+        role: entry.role,
+        programName: entry.programName,
+        count: 0,
+        amount: 0,
+      };
+      programTotal.count += 1;
+      programTotal.amount = Math.round((programTotal.amount + entry.amount + Number.EPSILON) * 100) / 100;
+      programTotals.set(programKey, programTotal);
     }
     sendJson(res, 200, {
+      month,
       entries,
       totals: [...totals.values()].sort((a, b) => a.name.localeCompare(b.name, "ar")),
+      programTotals: [...programTotals.values()].sort((a, b) => a.name.localeCompare(b.name, "ar") || a.programName.localeCompare(b.programName, "ar")),
     });
+    return;
+  }
+
+  if (req.method === "GET" && route === "/api/admin/users") {
+    if (!requireAdmin(req, res)) return;
+    sendJson(res, 200, {
+      users: store.users
+        .map(({ id, name, username, phone, role, createdAt }) => ({ id, name, username, phone, role, createdAt }))
+        .sort((a, b) => a.name.localeCompare(b.name, "ar")),
+    });
+    return;
+  }
+
+  if (req.method === "PATCH" && route === "/api/admin/users/role") {
+    if (!requireAdmin(req, res)) return;
+    const body = await readJson(req);
+    if (!["presenter", "sheikh", "monitor"].includes(body.role)) {
+      sendJson(res, 400, { error: "الدور المطلوب غير صحيح." });
+      return;
+    }
+    const account = store.users.find((person) => person.id === body.userId);
+    if (!account) {
+      sendJson(res, 404, { error: "الحساب غير موجود." });
+      return;
+    }
+    account.role = body.role;
+    for (const session of sessions.values()) {
+      if (session.user.id === account.id) session.user.role = account.role;
+    }
+    await persist();
+    sendJson(res, 200, { user: { id: account.id, name: account.name, username: account.username, role: account.role } });
+    return;
+  }
+
+  if (req.method === "GET" && route === "/api/admin/programs") {
+    if (!requireAdmin(req, res)) return;
+    sendJson(res, 200, { programs: [...store.programs].sort((a, b) => a.name.localeCompare(b.name, "ar")) });
+    return;
+  }
+
+  if (req.method === "POST" && route === "/api/admin/programs") {
+    if (!requireAdmin(req, res)) return;
+    const body = await readJson(req);
+    const name = cleanText(body.name, 100);
+    if (!name) {
+      sendJson(res, 400, { error: "اكتب اسم البرنامج." });
+      return;
+    }
+    if (store.programs.some((program) => program.name.toLocaleLowerCase("ar") === name.toLocaleLowerCase("ar"))) {
+      sendJson(res, 409, { error: "اسم البرنامج موجود من قبل." });
+      return;
+    }
+    const program = { id: randomBytes(16).toString("hex"), name, active: true, createdAt: new Date().toISOString() };
+    store.programs.push(program);
+    await persist();
+    sendJson(res, 201, { program });
+    return;
+  }
+
+  const programMatch = route.match(/^\/api\/admin\/programs\/([a-f0-9]+)$/);
+  if (req.method === "PATCH" && programMatch) {
+    if (!requireAdmin(req, res)) return;
+    const body = await readJson(req);
+    if (typeof body.active !== "boolean") {
+      sendJson(res, 400, { error: "حالة البرنامج غير صحيحة." });
+      return;
+    }
+    const program = store.programs.find((item) => item.id === programMatch[1]);
+    if (!program) {
+      sendJson(res, 404, { error: "البرنامج غير موجود." });
+      return;
+    }
+    program.active = body.active;
+    await persist();
+    sendJson(res, 200, { program });
     return;
   }
 
   const reviewMatch = route.match(/^\/api\/admin\/entries\/([a-f0-9]+)\/review$/);
   if (req.method === "PATCH" && reviewMatch) {
-    if (!requireAdmin(req, res)) return;
+    if (!requireReviewer(req, res)) return;
     const body = await readJson(req);
     if (!["approved", "rejected"].includes(body.status)) {
       sendJson(res, 400, { error: "حالة المراجعة غير صحيحة." });
@@ -364,6 +484,9 @@ async function handleApi(req, res, url) {
     }
     entry.status = body.status;
     entry.reviewedAt = new Date().toISOString();
+    const reviewer = sessionUser(req);
+    entry.reviewedBy = reviewer.id;
+    entry.reviewedByName = reviewer.name;
     await persist();
     sendJson(res, 200, { entry: entryForResponse(entry) });
     return;
@@ -382,6 +505,7 @@ async function serveStatic(res, pathname) {
     const contents = await fs.readFile(path.join(__dirname, fileName));
     res.writeHead(200, {
       "Content-Type": MIME_TYPES[pathname] || MIME_TYPES["/"],
+      "Cache-Control": "no-cache",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "same-origin",
       "Content-Security-Policy": "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
@@ -404,7 +528,25 @@ async function start() {
   try {
     const saved = JSON.parse(await fs.readFile(DATA_FILE, "utf8"));
     if (!Array.isArray(saved.users) || !Array.isArray(saved.entries)) throw new Error("صيغة ملف البيانات غير صحيحة.");
-    store = saved;
+    store = {
+      ...saved,
+      programs: Array.isArray(saved.programs) ? saved.programs : [],
+    };
+    for (const entry of store.entries) {
+      if (!entry.programName) continue;
+      let program = store.programs.find((item) => item.id === entry.programId)
+        || store.programs.find((item) => item.name === entry.programName);
+      if (!program) {
+        program = {
+          id: randomBytes(16).toString("hex"),
+          name: entry.programName,
+          active: true,
+          createdAt: entry.createdAt || new Date().toISOString(),
+        };
+        store.programs.push(program);
+      }
+      entry.programId = program.id;
+    }
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }

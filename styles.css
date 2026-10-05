@@ -199,3 +199,61 @@ footer span { padding: 0 5px; color: var(--gold); }
   #report-summary { margin: 10px 0; }
   th, td { padding: 7px 5px; font-size: 10px; }
 }
+
+:root {
+  --green: #315b48;
+  --green-dark: #252e29;
+  --green-pale: #edf2ed;
+}
+body { color: #242a26; }
+.welcome-panel h1, .page-heading h1 { color: #252e29; }
+.welcome-panel > p, .page-heading p { color: #555f59; }
+.welcome-panel { padding-right: 18px; }
+.auth-heading { margin-bottom: 22px; }
+.auth-heading h2 { margin: 8px 0 4px; color: #252e29; font-size: 22px; }
+.auth-heading p { margin-bottom: 0; color: #717b74; font-size: 12px; }
+.rate-preview { display: none; }
+.summary-label { overflow: hidden; font-size: 14px !important; text-overflow: ellipsis; white-space: nowrap; }
+.member-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.month-picker { display: grid; gap: 7px; width: min(220px, 100%); margin: 0 0 14px auto; color: #40544b; font-size: 12px; font-weight: 700; }
+.inline-form { display: flex; align-items: end; gap: 11px; margin-bottom: 17px; }
+.inline-form label { display: grid; flex: 1; gap: 7px; max-width: 400px; color: #40544b; font-size: 12px; font-weight: 700; }
+#admin-tools[hidden] { display: none !important; }
+#admin-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 18px; }
+.report-actions { flex-wrap: wrap; }
+#print-document { display: none; }
+@media (max-width: 800px) {
+  #admin-tools { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .member-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .welcome-panel { padding-right: 0; }
+  .welcome-panel::before { display: none; }
+  .welcome-panel h1 { font-size: 34px; }
+  .inline-form { align-items: stretch; flex-direction: column; }
+  .inline-form label { max-width: none; }
+  .inline-form button { width: 100%; }
+  .member-summary { grid-template-columns: 1fr 1fr; }
+  .member-summary .summary-card { min-width: 0; }
+}
+@media print {
+  body.printing > *:not(#print-document) { display: none !important; }
+  body.printing #print-document { display: block !important; padding: 0; color: #111; font-family: Tahoma, Arial, sans-serif; }
+  body.printing #print-document .print-heading { display: flex; justify-content: space-between; align-items: start; padding-bottom: 16px; border-bottom: 1px solid #888; font-size: 12px; }
+  body.printing #print-document .bismillah { flex: 1; text-align: center; font-size: 18px; font-weight: 700; }
+  body.printing #print-document .print-heading > div:last-child { min-width: 140px; text-align: left; }
+  body.printing #print-document .print-recipient { margin: 28px 0 16px; font-weight: 700; }
+  body.printing #print-document .print-greeting,
+  body.printing #print-document .print-body,
+  body.printing #print-document .print-closing { line-height: 2; }
+  body.printing #print-document h2 { margin: 24px 0 10px; font-size: 15px; }
+  body.printing #print-document table { width: 100%; margin-bottom: 18px; border-collapse: collapse; white-space: normal; }
+  body.printing #print-document th,
+  body.printing #print-document td { padding: 8px 6px; border: 1px solid #777; color: #111; font-size: 10px; text-align: right; }
+  body.printing #print-document th { background: #eee !important; print-color-adjust: exact; }
+  body.printing #print-document .grand-total td { font-weight: 700; }
+  body.printing #print-document .print-detail-table th,
+  body.printing #print-document .print-detail-table td { padding: 5px 3px; font-size: 8px; }
+  body.printing #print-document .print-closing { margin-top: 24px; }
+  body.printing #print-document .signature { margin-top: 35px; line-height: 2.2; }
+}
