@@ -218,6 +218,11 @@ body { color: #242a26; }
 .month-picker { display: grid; gap: 7px; width: min(220px, 100%); margin: 0 0 14px auto; color: #40544b; font-size: 12px; font-weight: 700; }
 .inline-form { display: flex; align-items: end; gap: 11px; margin-bottom: 17px; }
 .inline-form label { display: grid; flex: 1; gap: 7px; max-width: 400px; color: #40544b; font-size: 12px; font-weight: 700; }
+.inline-form label:has(select) { flex: 0 1 175px; }
+.entry-details { display: grid; gap: 16px; min-width: 0; padding: 0; margin: 0; border: 0; }
+.entry-details[hidden] { display: none; }
+.entry-details:disabled { display: none; }
+.entry-details input[readonly] { background: #f4f6f4; color: #52635a; }
 #admin-tools[hidden] { display: none !important; }
 #admin-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 18px; }
 .report-actions { flex-wrap: wrap; }
@@ -232,6 +237,7 @@ body { color: #242a26; }
   .welcome-panel h1 { font-size: 34px; }
   .inline-form { align-items: stretch; flex-direction: column; }
   .inline-form label { max-width: none; }
+  .inline-form label:has(select) { flex-basis: auto; }
   .inline-form button { width: 100%; }
   .member-summary { grid-template-columns: 1fr 1fr; }
   .member-summary .summary-card { min-width: 0; }

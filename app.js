@@ -79,6 +79,7 @@ function showView(user) {
   } else {
     $("#member-name").textContent = user.name;
     $("#member-role").textContent = roleNames[user.role];
+    $("#entry-owner").value = user.name;
     $("#co-label").firstChild.textContent = user.role === "sheikh" ? "اسم المقدم" : "اسم الشيخ";
     loadMember().catch((error) => setMessage($("#entry-message"), error.message, true));
   }
@@ -153,18 +154,54 @@ function updateEstimate() {
 
 function renderProgramOptions() {
   const select = $("#program-select");
-  if (!activePrograms.length) {
-    select.innerHTML = '<option value="">لا توجد برامج متاحة حالياً؛ راجع الإدارة العليا.</option>';
+  const type = $("#program-type").value;
+  const programs = activePrograms.filter((program) => (program.type || "both") === type || program.type === "both");
+  if (!type) {
+    select.innerHTML = '<option value="">اختر نوع البرنامج أولاً</option>';
     select.disabled = true;
+    $("#entry-details").hidden = true;
+    $("#entry-details").disabled = true;
+    return;
+  }
+  if (!programs.length) {
+    select.innerHTML = '<option value="">لا توجد برامج من هذا النوع؛ راجع الإدارة العليا.</option>';
+    select.disabled = true;
+    $("#entry-details").hidden = true;
+    $("#entry-details").disabled = true;
     return;
   }
   select.disabled = false;
-  select.innerHTML = `<option value="">اختر البرنامج</option>${activePrograms.map((program) =>
+  select.innerHTML = `<option value="">اختر البرنامج</option>${programs.map((program) =>
     `<option value="${escapeHtml(program.id)}">${escapeHtml(program.name)}</option>`).join("")}`;
+  $("#entry-details").hidden = true;
+  $("#entry-details").disabled = true;
 }
 
-$("#entry-form").elements.type.addEventListener("change", updateEstimate);
-$("#entry-form").elements.durationMinutes.addEventListener("input", updateEstimate);
+function fillDurationOptions() {
+  const select = $("#duration-select");
+  for (let minutes = 15; minutes <= 120; minutes += 15) {
+    const option = document.createElement("option");
+    option.value = String(minutes);
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    option.textContent = hours && remainingMinutes
+      ? `${hours} ساعة و${remainingMinutes} دقيقة`
+      : hours === 2 ? "ساعتان" : hours === 1 ? "ساعة واحدة" : `${minutes} دقيقة`;
+    select.append(option);
+  }
+}
+
+$("#program-type").addEventListener("change", () => {
+  $("#program-select").value = "";
+  renderProgramOptions();
+  updateEstimate();
+});
+$("#program-select").addEventListener("change", () => {
+  const hasProgram = Boolean($("#program-select").value);
+  $("#entry-details").hidden = !hasProgram;
+  $("#entry-details").disabled = !hasProgram;
+});
+$("#duration-select").addEventListener("change", updateEstimate);
 
 $("#entry-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -177,6 +214,10 @@ $("#entry-form").addEventListener("submit", async (event) => {
       body: JSON.stringify(Object.fromEntries(form.entries())),
     });
     formElement.reset();
+    $("#entry-details").hidden = true;
+    $("#entry-details").disabled = true;
+    $("#program-select").innerHTML = '<option value="">اختر نوع البرنامج أولاً</option>';
+    $("#program-select").disabled = true;
     formElement.elements.date.value = localDate();
     updateEstimate();
     setMessage(message, "تم تسجيل المشاركة وإرسالها للمراجعة.");
@@ -205,7 +246,7 @@ function renderMemberEntries(entries) {
       <strong>${escapeHtml(entry.programName)}</strong>
       <span class="status ${escapeHtml(entry.status)}">${statusNames[entry.status]}</span>
       <div class="entry-meta">
-        تاريخ البرنامج: ${formatDate(entry.date)} · ${typeNames[entry.type]} · ${entry.durationMinutes} دقيقة<br>
+        رقم الحلقة: ${entry.episodeNumber || "—"} · تاريخ البرنامج: ${formatDate(entry.date)} · ${typeNames[entry.type]} · ${entry.durationMinutes} دقيقة<br>
         المشارك الآخر: ${escapeHtml(entry.coParticipant)}<br>
         التفاصيل المالية: ${entry.durationMinutes} ÷ 60 ساعة × ${money(entry.hourlyRate)} للساعة = ${money(entry.amount)}<br>
         تاريخ التسجيل: ${formatDateTime(entry.createdAt)}<br>
@@ -237,10 +278,10 @@ function renderPending(entries) {
     container.innerHTML = '<div class="empty-state">لا توجد طلبات جديدة للمراجعة.</div>';
     return;
   }
-  container.innerHTML = `<table><thead><tr><th>المشارك</th><th>الصفة</th><th>البرنامج</th><th>المشارك الآخر</th><th>تاريخ البرنامج</th><th>تاريخ التسجيل</th><th>النوع</th><th>المدة</th><th>المستحق</th><th>الإجراء</th></tr></thead><tbody>${pending.map((entry) => `
+  container.innerHTML = `<table><thead><tr><th>المشارك</th><th>الصفة</th><th>البرنامج</th><th>رقم الحلقة</th><th>المشارك الآخر</th><th>تاريخ البرنامج</th><th>تاريخ التسجيل</th><th>النوع</th><th>المدة</th><th>المستحق</th><th>الإجراء</th></tr></thead><tbody>${pending.map((entry) => `
     <tr>
       <td>${escapeHtml(entry.name)}</td><td>${roleNames[entry.role]}</td><td>${escapeHtml(entry.programName)}</td>
-      <td>${escapeHtml(entry.coParticipant)}</td><td>${formatDate(entry.date)}</td><td>${formatDateTime(entry.createdAt)}</td>
+      <td>${entry.episodeNumber || "—"}</td><td>${escapeHtml(entry.coParticipant)}</td><td>${formatDate(entry.date)}</td><td>${formatDateTime(entry.createdAt)}</td>
       <td>${typeNames[entry.type]}</td><td>${entry.durationMinutes} دقيقة</td>
       <td>${money(entry.amount)}</td><td><div class="row-actions">
         <button class="button approve" data-review="${entry.id}" data-status="approved" type="button">اعتماد</button>
@@ -356,9 +397,9 @@ function exportDetails() {
     return;
   }
   csvDownload(`تفصيل-المستحقات-${latestReport.month}.csv`, [
-    ["اسم المشارك", "الصفة", "البرنامج", "تاريخ البرنامج", "تاريخ التسجيل", "تاريخ المراجعة", "اعتمدها", "نوع البرنامج", "المدة بالدقائق", "سعر الساعة بالدينار", "المستحق بالدينار"],
+    ["اسم المشارك", "الصفة", "البرنامج", "رقم الحلقة", "تاريخ البرنامج", "تاريخ التسجيل", "تاريخ المراجعة", "اعتمدها", "نوع البرنامج", "المدة بالدقائق", "سعر الساعة بالدينار", "المستحق بالدينار"],
     ...latestReport.entries.map((entry) => [
-      entry.name, roleNames[entry.role], entry.programName, entry.date, formatDateTime(entry.createdAt),
+      entry.name, roleNames[entry.role], entry.programName, entry.episodeNumber, entry.date, formatDateTime(entry.createdAt),
       formatDateTime(entry.reviewedAt), entry.reviewerName, typeNames[entry.type], entry.durationMinutes,
       entry.hourlyRate.toFixed(2), entry.amount.toFixed(2),
     ]),
@@ -379,7 +420,7 @@ function printReport(detail) {
   const programRows = latestReport.programTotals.map((item) =>
     `<tr><td>${escapeHtml(item.programName)}</td><td>${item.count.toLocaleString("ar-LY")}</td><td>${money(item.amount)}</td></tr>`).join("");
   const detailRows = latestReport.entries.map((entry, index) =>
-    `<tr><td>${(index + 1).toLocaleString("ar-LY")}</td><td>${escapeHtml(entry.programName)}</td><td>${formatDate(entry.date)}</td><td>${formatDateTime(entry.createdAt)}</td><td>${typeNames[entry.type]}</td><td>${entry.durationMinutes.toLocaleString("ar-LY")} دقيقة × ${money(entry.hourlyRate)}</td><td>${formatDateTime(entry.reviewedAt)}</td><td>${escapeHtml(entry.reviewerName || "الإدارة العليا")}</td><td>${money(entry.amount)}</td></tr>`).join("");
+    `<tr><td>${(index + 1).toLocaleString("ar-LY")}</td><td>${escapeHtml(entry.programName)}</td><td>${entry.episodeNumber || "—"}</td><td>${formatDate(entry.date)}</td><td>${formatDateTime(entry.createdAt)}</td><td>${typeNames[entry.type]}</td><td>${entry.durationMinutes.toLocaleString("ar-LY")} ÷ 60 × ${money(entry.hourlyRate)}</td><td>${formatDateTime(entry.reviewedAt)}</td><td>${escapeHtml(entry.reviewerName || "الإدارة العليا")}</td><td>${money(entry.amount)}</td></tr>`).join("");
   const total = latestReport.entries.reduce((sum, entry) => sum + entry.amount, 0);
   const printDocument = $("#print-document");
   printDocument.innerHTML = `
@@ -392,7 +433,7 @@ function printReport(detail) {
     <p class="print-body">نحيل إليكم كشف مستحقات برامج إذاعة دار الإفتاء الليبية عن شهر <strong>${escapeHtml(monthLabel(latestReport.month))}</strong>، والخاصة بـ<strong>${escapeHtml(personName)}</strong>، وذلك حسب المشاركات المعتمدة الموضحة أدناه.</p>
     <h2>إجمالي المستحقات حسب البرنامج</h2>
     <table><thead><tr><th>البرنامج</th><th>عدد المشاركات</th><th>الإجمالي</th></tr></thead><tbody>${programRows}<tr class="grand-total"><td colspan="2">الإجمالي العام</td><td>${money(total)}</td></tr></tbody></table>
-    ${detail ? `<h2>التفصيل المالي وسجل المراجعة</h2><table class="print-detail-table"><thead><tr><th>م</th><th>البرنامج</th><th>تاريخ البرنامج</th><th>تاريخ التسجيل</th><th>النوع</th><th>المدة × سعر الساعة</th><th>تاريخ المراجعة</th><th>اعتمدها</th><th>المستحق</th></tr></thead><tbody>${detailRows}</tbody></table>` : ""}
+    ${detail ? `<h2>التفصيل المالي وسجل المراجعة</h2><table class="print-detail-table"><thead><tr><th>م</th><th>البرنامج</th><th>الحلقة</th><th>تاريخ البرنامج</th><th>تاريخ التسجيل</th><th>النوع</th><th>المدة ÷ 60 × سعر الساعة</th><th>تاريخ المراجعة</th><th>اعتمدها</th><th>المستحق</th></tr></thead><tbody>${detailRows}</tbody></table>` : ""}
     <p class="print-closing">وتفضلوا بقبول فائق الاحترام والتقدير.</p>
     <div class="signature">الاسم: ____________________<br>التوقيع: __________________</div>`;
   document.body.classList.add("printing");
@@ -408,8 +449,8 @@ $("#print-details").addEventListener("click", () => printReport(true));
 async function loadProgramsAdmin() {
   const { programs } = await api("/api/admin/programs");
   $("#program-list").innerHTML = programs.length
-    ? `<table><thead><tr><th>البرنامج</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${programs.map((program) => `
-      <tr><td>${escapeHtml(program.name)}</td><td>${program.active ? "متاح للتسجيل" : "موقوف"}</td><td><button class="button subtle" data-program="${program.id}" data-active="${!program.active}" type="button">${program.active ? "إيقاف التسجيل" : "إعادة التفعيل"}</button></td></tr>
+    ? `<table><thead><tr><th>البرنامج</th><th>النوع</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${programs.map((program) => `
+      <tr><td>${escapeHtml(program.name)}</td><td>${program.type === "recorded" ? "مسجل" : program.type === "live" ? "مباشر" : "قديم / النوعين"}</td><td>${program.active ? "متاح للتسجيل" : "موقوف"}</td><td><button class="button subtle" data-program="${program.id}" data-active="${!program.active}" type="button">${program.active ? "إيقاف التسجيل" : "إعادة التفعيل"}</button></td></tr>
     `).join("")}</tbody></table>`
     : '<div class="empty-state">أضف البرامج لتظهر للمقدمين والشيوخ في نموذج التسجيل.</div>';
   $("#program-list").querySelectorAll("[data-program]").forEach((button) => {
@@ -429,7 +470,7 @@ $("#program-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await api("/api/admin/programs", { method: "POST", body: JSON.stringify({ name: new FormData(form).get("name") }) });
+    await api("/api/admin/programs", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form).entries())) });
     form.reset();
     await loadProgramsAdmin();
     setMessage($("#admin-message"), "تمت إضافة البرنامج.");
@@ -466,6 +507,7 @@ async function loadUsersAdmin() {
 }
 
 async function initialize() {
+  fillDurationOptions();
   const month = currentMonth();
   $("#entry-form").elements.date.value = localDate();
   $("#member-month").value = month;

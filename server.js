@@ -150,7 +150,7 @@ function entryForResponse(entry) {
     ...entry,
     name: user?.name || "حساب محذوف",
     username: user?.username || "",
-    reviewerName: entry.reviewedBy === "admin" ? "الإدارة العليا" : entry.reviewedByName || reviewer?.name || "",
+    reviewerName: entry.reviewedByName || (entry.reviewedBy === "admin" ? "الإدارة العليا" : reviewer?.name || ""),
     amount: entryAmount(entry),
     hourlyRate: entryAmount({ ...entry, durationMinutes: 60 }),
   };
@@ -314,11 +314,16 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const program = store.programs.find((item) => item.id === body.programId && item.active);
     const coParticipant = cleanText(body.coParticipant, 80);
+    const episodeNumber = cleanText(String(body.episodeNumber ?? ""), 5);
     const date = cleanText(body.date, 10);
     const durationMinutes = Number(body.durationMinutes);
     const type = body.type;
-    if (!program || !coParticipant || !isValidDate(date) || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440 || !["live", "recorded"].includes(type)) {
-      sendJson(res, 400, { error: "تحقق من البرنامج والطرف الآخر والتاريخ ونوع البرنامج والمدة." });
+    const allowedDurations = new Set([15, 30, 45, 60, 75, 90, 105, 120]);
+    if (!program || !["both", type].includes(program.type || "both") || !coParticipant
+      || !/^\d{1,5}$/.test(episodeNumber) || Number(episodeNumber) < 1
+      || !isValidDate(date) || !allowedDurations.has(durationMinutes)
+      || !["live", "recorded"].includes(type)) {
+      sendJson(res, 400, { error: "تحقق من نوع البرنامج ورقمه والمشارك الآخر والتاريخ والمدة." });
       return;
     }
     const entry = {
@@ -327,6 +332,7 @@ async function handleApi(req, res, url) {
       role: user.role,
       programId: program.id,
       programName: program.name,
+      episodeNumber: Number(episodeNumber),
       coParticipant,
       date,
       durationMinutes,
@@ -431,15 +437,16 @@ async function handleApi(req, res, url) {
     if (!requireAdmin(req, res)) return;
     const body = await readJson(req);
     const name = cleanText(body.name, 100);
-    if (!name) {
-      sendJson(res, 400, { error: "اكتب اسم البرنامج." });
+    const type = body.type;
+    if (!name || !["live", "recorded"].includes(type)) {
+      sendJson(res, 400, { error: "اكتب اسم البرنامج واختر إذا كان مباشراً أو مسجلاً." });
       return;
     }
-    if (store.programs.some((program) => program.name.toLocaleLowerCase("ar") === name.toLocaleLowerCase("ar"))) {
-      sendJson(res, 409, { error: "اسم البرنامج موجود من قبل." });
+    if (store.programs.some((program) => program.type === type && program.name.toLocaleLowerCase("ar") === name.toLocaleLowerCase("ar"))) {
+      sendJson(res, 409, { error: "هذا الاسم موجود من قبل ضمن برامج النوع نفسه." });
       return;
     }
-    const program = { id: randomBytes(16).toString("hex"), name, active: true, createdAt: new Date().toISOString() };
+    const program = { id: randomBytes(16).toString("hex"), name, type, active: true, createdAt: new Date().toISOString() };
     store.programs.push(program);
     await persist();
     sendJson(res, 201, { program });
@@ -540,6 +547,7 @@ async function start() {
         program = {
           id: randomBytes(16).toString("hex"),
           name: entry.programName,
+          type: "both",
           active: true,
           createdAt: entry.createdAt || new Date().toISOString(),
         };

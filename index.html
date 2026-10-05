@@ -62,16 +62,20 @@
           <section class="panel form-panel">
             <div class="section-heading"><div><span class="step">١</span><h2>تسجيل مشاركة</h2></div><span class="muted">تُرسل للإدارة للمراجعة</span></div>
             <form id="entry-form" class="form-stack">
-              <label>اسم البرنامج<select name="programId" id="program-select" required></select></label>
-              <label id="co-label">اسم الشيخ<input name="coParticipant" maxlength="80" required></label>
-              <div class="form-row">
-                <label>تاريخ البرنامج<input name="date" type="date" required></label>
-                <label>نوع البرنامج<select name="type" required><option value="recorded">مسجل</option><option value="live">مباشر</option></select></label>
-              </div>
-              <label>مدة المشاركة بالدقائق<input name="durationMinutes" type="number" min="1" max="1440" step="1" placeholder="مثال: 30" required><small>نصف ساعة = 30 دقيقة. تُحسب المستحقات تلقائياً.</small></label>
-              <div class="estimate"><span>تقدير المستحق لهذه المشاركة</span><strong id="entry-estimate">— د.ل</strong></div>
-              <button class="button primary" type="submit">إرسال للمراجعة</button>
-              <p id="entry-message" class="message" role="status" aria-live="polite"></p>
+              <label>نوع البرنامج<select name="type" id="program-type" required><option value="">اختر نوع البرنامج</option><option value="live">مباشر</option><option value="recorded">مسجل</option></select></label>
+              <label>اسم البرنامج<select name="programId" id="program-select" required disabled><option value="">اختر نوع البرنامج أولاً</option></select></label>
+              <fieldset id="entry-details" class="entry-details" disabled hidden>
+                <label>المشارك المسجل<input id="entry-owner" type="text" readonly></label>
+                <label>رقم الحلقة<input name="episodeNumber" type="number" min="1" max="99999" step="1" inputmode="numeric" required></label>
+                <label id="co-label">اسم الشيخ<input name="coParticipant" maxlength="80" required></label>
+                <div class="form-row">
+                  <label>تاريخ البرنامج<input name="date" type="date" required></label>
+                  <label>مدة المشاركة<select name="durationMinutes" id="duration-select" required><option value="">اختر المدة</option></select></label>
+                </div>
+                <div class="estimate"><span>تقدير المستحق للمدة المحددة</span><strong id="entry-estimate">— د.ل</strong></div>
+                <button class="button primary" type="submit">إرسال للمراجعة</button>
+                <p id="entry-message" class="message" role="status" aria-live="polite"></p>
+              </fieldset>
             </form>
           </section>
           <section class="panel entries-panel">
@@ -114,6 +118,7 @@
             <div class="section-heading"><div><span class="step">٣</span><h2>إدارة البرامج</h2></div></div>
             <form id="program-form" class="inline-form">
               <label>اسم البرنامج<input name="name" maxlength="100" required></label>
+              <label>نوع البرنامج<select name="type" required><option value="live">مباشر</option><option value="recorded">مسجل</option></select></label>
               <button class="button primary" type="submit">إضافة البرنامج</button>
             </form>
             <div id="program-list" class="table-wrap"></div>
