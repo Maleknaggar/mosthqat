@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#273b32">
-    <title>مستحقات برامج الراديو | دار الإفتاء الليبية</title>
+    <title>إدارة برامج دار الإفتاء | دار الإفتاء الليبية</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
   </head>
@@ -12,16 +12,27 @@
     <header class="site-header">
       <a class="brand" href="/" aria-label="الرئيسية">
         <span class="brand-mark"><img src="/logo.png" alt=""></span>
-        <span><strong>دار الإفتاء الليبية</strong><small>نظام مستحقات برامج الراديو</small></span>
+        <span><strong>دار الإفتاء الليبية</strong><small>نظام الإذاعة والقناة المرئية</small></span>
       </a>
-      <div id="header-user" class="header-user" hidden></div>
+      <div id="header-user" class="header-user" hidden>
+        <span id="header-label"></span>
+        <button type="button" id="channel-switcher" class="button subtle">اختيار القناة</button>
+        <nav id="app-nav" class="app-nav" aria-label="صفحات النظام"></nav>
+        <details class="settings-menu">
+          <summary aria-label="الإعدادات">⚙ الإعدادات</summary>
+          <div class="settings-options">
+            <button type="button" data-page="settings">إعدادات الحساب</button>
+            <button type="button" id="logout-button">تسجيل الخروج</button>
+          </div>
+        </details>
+      </div>
     </header>
 
     <main class="page-shell">
       <section id="auth-view" class="auth-layout">
         <div class="welcome-panel">
           <span class="eyebrow">بوابة العمل الداخلي</span>
-          <h1>إدارة مشاركات<br>ومستحقات الراديو</h1>
+          <h1>إدارة برامج<br>دار الإفتاء الليبية</h1>
           <p>سجّل المشاركات، راجع حالة الطلبات، وتابع كشوف المستحقات الشهرية حسب الصلاحية.</p>
         </div>
         <div class="auth-card">
@@ -39,6 +50,7 @@
           <form id="register-form" class="form-stack" hidden>
             <label>الاسم الكامل<input name="name" autocomplete="name" maxlength="80" required></label>
             <label>رقم الهاتف<input name="phone" type="tel" autocomplete="tel" maxlength="30" required></label>
+            <label>البريد الإلكتروني (لإشعارات المراقبة)<input name="email" type="email" maxlength="254"></label>
             <label>اسم المستخدم<input name="username" autocomplete="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9_.\x2d]+" required><small>أحرف إنجليزية أو أرقام، بدون مسافات.</small></label>
             <label>الصفة
               <select name="role" required>
@@ -50,6 +62,22 @@
             <button class="button primary" type="submit">إنشاء الحساب</button>
           </form>
           <p id="auth-message" class="message" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="channel-view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">بوابة القنوات</span><h1>اختر القناة</h1><p>حسابك واحد، وبيانات العمل والبرامج مستقلة لكل قناة.</p></div></div>
+        <div class="channel-grid">
+          <button class="channel-card" type="button" data-channel-select="radio">
+            <span class="channel-card-icon">١</span><strong>إذاعة دار الإفتاء</strong>
+            <span>المشاركات، حجوزات الاستوديو، الحلقات، المستحقات والأرشيف الإذاعي.</span>
+            <span class="channel-card-action">الدخول إلى الإذاعة ←</span>
+          </button>
+          <button class="channel-card" type="button" data-channel-select="visual">
+            <span class="channel-card-icon">٢</span><strong>القناة المرئية</strong>
+            <span>مساحة مستقلة لبرامج القناة المرئية وحجوزاتها وحلقاتها ومستحقاتها.</span>
+            <span class="channel-card-action">الدخول إلى القناة المرئية ←</span>
+          </button>
         </div>
       </section>
 
@@ -96,6 +124,10 @@
           <div class="section-heading"><div><span class="step">١</span><h2>طلبات بانتظار المراجعة</h2></div><button class="button subtle" id="refresh-admin" type="button">تحديث</button></div>
           <div id="pending-entries" class="table-wrap"></div>
         </section>
+        <section class="panel review-panel">
+          <div class="section-heading"><div><span class="step">٢</span><h2>مراجعة حجوزات التسجيل</h2></div></div>
+          <div id="pending-bookings" class="table-wrap"></div>
+        </section>
         <section id="reports-panel" class="panel report-panel">
           <div class="section-heading"><div><span class="step">٢</span><h2>كشف المستحقات المعتمدة</h2></div></div>
           <form id="report-filter" class="filter-row">
@@ -123,6 +155,22 @@
             </form>
             <div id="program-list" class="table-wrap"></div>
           </section>
+          <section id="rates-panel" class="panel management-panel">
+            <div class="section-heading"><div><span class="step">٤</span><h2 id="rates-heading">أسعار الساعة</h2></div></div>
+            <form id="rate-form" class="form-stack">
+              <div class="form-row">
+                <label>المقدم · مباشر<input name="livePresenter" type="number" min="0" max="10000" step="0.01" required></label>
+                <label>الشيخ · مباشر<input name="liveSheikh" type="number" min="0" max="10000" step="0.01" required></label>
+              </div>
+              <div class="form-row">
+                <label>المقدم · مسجل<input name="recordedPresenter" type="number" min="0" max="10000" step="0.01" required></label>
+                <label>الشيخ · مسجل<input name="recordedSheikh" type="number" min="0" max="10000" step="0.01" required></label>
+              </div>
+              <p class="muted">تؤثر الأسعار الجديدة في المشاركات اللاحقة فقط؛ تبقى أسعار المشاركات السابقة محفوظة كما احتُسبت.</p>
+              <button class="button primary" type="submit">حفظ أسعار القناة</button>
+              <p id="rate-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
           <section class="panel management-panel">
             <div class="section-heading"><div><span class="step">٤</span><h2>إدارة الحسابات والصلاحيات</h2></div></div>
             <p class="muted">المستخدمون الجدد يسجلون كمقدم أو شيخ. غيّر صلاحية الحساب إلى مراقب عند الحاجة.</p>
@@ -130,8 +178,130 @@
           </section>
         </div>
       </section>
+      <div class="feature-shell">
+      <section id="booking-view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">جدولة الاستوديو</span><h1>حجز موعد تسجيل</h1><p>احجز موعداً لأحد البرامج المسجلة فقط، لأحد اليومين القادمين. أوقات الاستوديو من السبت إلى الخميس، 1 ظهراً حتى 7 مساءً.</p></div></div>
+        <div class="workspace-grid">
+          <section class="panel">
+            <div class="section-heading"><div><span class="step">١</span><h2>بيانات الحجز</h2></div></div>
+            <form id="booking-form" class="form-stack">
+              <label>البرنامج<select name="programId" id="booking-program" required></select></label>
+              <label>تاريخ التسجيل<select name="date" id="booking-date" required></select></label>
+              <label>وقت البداية<select name="startTime" id="booking-time" required></select></label>
+              <label>مدة الحجز<select name="durationMinutes" id="booking-duration" required></select></label>
+              <label>رقم الحلقة<input name="episodeNumber" type="number" min="1" max="99999" required></label>
+              <label id="booking-co-label">اسم المشارك الآخر<input name="coParticipant" maxlength="80" required></label>
+              <p class="muted">الحجز فوري. لا يتجاوز البرنامج ساعتين في اليوم ولا تتداخل المواعيد. يمكنك تعديل/إلغاء الموعد قبل بدايته.</p>
+              <button class="button primary" type="submit">تأكيد الحجز</button>
+              <p id="booking-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="section-heading"><div><span class="step">٢</span><h2>المواعيد</h2></div><button class="button subtle" id="refresh-bookings" type="button">تحديث</button></div>
+            <div id="booking-list" class="entry-list"></div>
+          </section>
+        </div>
+        <section id="proposal-panel" class="panel" hidden>
+          <div class="section-heading"><div><span class="step">٣</span><h2>اقتراح برنامج جديد</h2></div><span class="muted">يُحفظ الخطاب في أرشيف القناة</span></div>
+          <form id="proposal-form" class="form-stack">
+            <div class="form-row">
+              <label>اسم الشيخ<input name="authorName" id="proposal-author-name" readonly></label>
+              <label>القناة المقترحة<input id="proposal-channel-label" readonly></label>
+            </div>
+            <label>اسم البرنامج المقترح<input name="programName" maxlength="100" required></label>
+            <label>فكرة البرنامج ومواصفاته<textarea name="description" rows="4" maxlength="2000" required></textarea></label>
+            <div class="form-row">
+              <label>الهدف من البرنامج<textarea name="objective" rows="3" maxlength="800" required></textarea></label>
+              <label>الفئة المستهدفة<textarea name="audience" rows="3" maxlength="300" required></textarea></label>
+            </div>
+            <div class="form-row">
+              <label>مدة الحلقة المقترحة<select name="durationMinutes" required>
+                <option value="">اختر المدة</option><option value="15">15 دقيقة</option><option value="30">30 دقيقة</option>
+                <option value="45">45 دقيقة</option><option value="60">ساعة</option><option value="75">ساعة و15 دقيقة</option>
+                <option value="90">ساعة ونصف</option><option value="105">ساعة و45 دقيقة</option><option value="120">ساعتان</option>
+              </select></label>
+              <label>وتيرة البث المقترحة<select name="frequency" required>
+                <option value="">اختر الوتيرة</option><option value="weekly">أسبوعي</option><option value="biweekly">كل أسبوعين</option>
+                <option value="monthly">شهري</option><option value="other">أخرى / حسب الخطة</option>
+              </select></label>
+            </div>
+            <label>هل يحتاج البرنامج إلى مقدم؟<select name="needsPresenter" id="proposal-needs-presenter" required><option value="">اختر الإجابة</option><option value="yes">نعم</option><option value="no">لا</option></select></label>
+            <label id="proposal-presenter-label" hidden>اسم المقدم المقترح<input name="suggestedPresenter" maxlength="80"></label>
+            <label>ملاحظات إضافية (اختياري)<textarea name="additionalNotes" rows="3" maxlength="800"></textarea></label>
+            <button class="button primary" type="submit">إنشاء الخطاب وحفظه في الأرشيف</button>
+            <p id="proposal-message" class="message" role="status" aria-live="polite"></p>
+            <div id="proposal-download"></div>
+          </form>
+        </section>
+      </section>
+
+      <section id="episodes-view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">أرشيف التسجيلات</span><h1>متابعة الحلقات</h1><p>اختر برنامجاً لمشاهدة أحدث الحلقات وسجلها.</p></div></div>
+        <section class="panel">
+          <label class="month-picker">البرنامج<select id="episode-program" required></select></label>
+          <div id="episode-list" class="entry-list"></div>
+          <p id="episode-message" class="message" role="status" aria-live="polite"></p>
+        </section>
+        <section id="episode-upload-panel" class="panel" hidden>
+          <div class="section-heading"><div><span class="step">١</span><h2>رفع تسجيل حلقة</h2></div><span class="muted">للمراقب والإدارة العليا</span></div>
+          <form id="episode-upload-form" class="form-stack">
+            <label>البرنامج<select name="programId" id="upload-program" required></select></label>
+            <label>رقم الحلقة<input name="episodeNumber" type="number" min="1" max="99999" required></label>
+            <label>تاريخ الحلقة<input name="date" type="date" required></label>
+            <label>الشيخ أو الشيوخ<select name="sheikhIds" id="upload-sheikhs" multiple required></select></label>
+            <label>المقدم أو المقدمون<select name="presenterIds" id="upload-presenters" multiple required></select></label>
+            <label>ملف الحلقة<input name="media" type="file" accept=".mp3,.mp4,audio/mpeg,video/mp4" required><small>MP3 أو MP4، حتى 800 ميغابايت. يمكن للمشاركين المرتبطين بالحلقة تشغيل الملف وتنزيله.</small></label>
+            <button class="button primary" type="submit">رفع الحلقة</button>
+            <p id="episode-upload-message" class="message" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+      </section>
+
+      <section id="archive-view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">سجل إداري محفوظ</span><h1>أرشيف الملفات والقرارات</h1><p>ملفات التقارير ومحاضر Word وقرارات الاعتماد والرفض حسب الشهر.</p></div></div>
+        <section class="panel">
+          <form id="archive-filter" class="filter-row">
+            <label>السنة والشهر<input id="archive-month" name="month" type="month" required></label>
+            <span id="archive-channel-label" class="role-badge"></span>
+            <button class="button primary" type="submit">عرض الأرشيف</button>
+            <button class="button subtle" id="archive-zip" type="button">تنزيل ملفات الشهر ZIP</button>
+          </form>
+          <h2>مقترحات البرامج</h2><div id="archive-proposals" class="table-wrap"></div>
+          <h2>كشوف المستحقات ومحاضر Word</h2><div id="archive-files" class="table-wrap"></div>
+          <h2>قرارات المراجعة</h2><div id="archive-decisions" class="table-wrap"></div>
+          <p id="archive-message" class="message" role="status" aria-live="polite"></p>
+        </section>
+      </section>
+
+      <section id="settings-view" hidden>
+        <div class="page-heading"><div><span class="eyebrow">إدارة شخصية</span><h1>إعدادات الحساب</h1><p>حدّث بياناتك بأمان. اسم المستخدم والصلاحية لا يمكن تغييرهما من هذه الصفحة.</p></div></div>
+        <div class="workspace-grid">
+          <section class="panel">
+            <h2>البيانات الشخصية</h2>
+            <form id="account-form" class="form-stack">
+              <label>الاسم الكامل<input name="name" maxlength="80" required></label>
+              <label>رقم الهاتف<input name="phone" maxlength="30" required></label>
+              <label>البريد الإلكتروني<input name="email" type="email" maxlength="254"></label>
+              <label>كلمة المرور الحالية للتحقق<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+              <button class="button primary" type="submit">حفظ البيانات</button>
+              <p id="account-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="panel">
+            <h2>تغيير كلمة المرور</h2>
+            <form id="password-form" class="form-stack">
+              <label>كلمة المرور الحالية<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+              <label>كلمة المرور الجديدة<input name="newPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label>
+              <label>تأكيد كلمة المرور الجديدة<input name="confirmPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label>
+              <button class="button primary" type="submit">تغيير كلمة المرور</button>
+              <p id="password-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+        </div>
+      </section>
+      </div>
     </main>
     <section id="print-document" aria-label="كشف المستحقات للطباعة"></section>
-    <footer>دار الإفتاء الليبية <span>·</span> نظام تنظيم مستحقات برامج الراديو</footer>
+    <footer>دار الإفتاء الليبية <span>·</span> نظام إدارة برامج الإذاعة والقناة المرئية</footer>
   </body>
 </html>
