@@ -14,7 +14,7 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: DATA_DIR
-        value: /var/data
+        value: /tmp/dar-al-ifta-radio-dues
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
