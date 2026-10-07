@@ -317,7 +317,7 @@ function sendMonitorEmail(subject, text, includeAdmin = false) {
     return Promise.resolve({ sent: false, warning: "إعداد البريد الإلكتروني غير مكتمل؛ تم حفظ العملية، لكن لم يُرسل الإشعار." });
   }
   if (!recipients.length) {
-    return Promise.resolve({ sent: false, warning: "لا توجد عناوين بريد مسجلة للمراقبين؛ تم حفظ العملية دون إرسال الإشعار." });
+    return Promise.resolve({ sent: false, warning: "لا توجد عناوين بريد مسجلة للإدارة أو المراقبين؛ تم حفظ العملية دون إرسال الإشعار." });
   }
   if (!mailTransport) {
     mailTransport = nodemailer.createTransport({
@@ -924,7 +924,8 @@ async function handleApi(req, res, url) {
       .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
       .map((booking) => bookingForResponse(booking, user));
     const programDailyMinutes = {};
-    for (const booking of store.bookings.filter((item) => item.channel === channel && dates.includes(item.date) && item.status !== "cancelled")) {
+    for (const booking of store.bookings.filter((item) => item.channel === channel && dates.includes(item.date)
+      && !["cancelled", "rejected", "no_show"].includes(item.status))) {
       programDailyMinutes[booking.date] ||= {};
       programDailyMinutes[booking.date][booking.programId] = (programDailyMinutes[booking.date][booking.programId] || 0) + booking.durationMinutes;
     }
@@ -938,7 +939,8 @@ async function handleApi(req, res, url) {
     if (!channel) return;
     const now = new Date();
     const bookings = store.bookings
-      .filter((booking) => booking.channel === channel && (booking.status === "completed_pending"
+      .filter((booking) => booking.channel === channel && (booking.status === "pending_approval"
+        || booking.status === "completed_pending"
         || (booking.status === "booked" && new Date(`${booking.date}T${booking.endTime}:00+02:00`) <= now)))
       .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
     sendJson(res, 200, { bookings });
@@ -983,7 +985,7 @@ async function handleApi(req, res, url) {
       }
       const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
       const sameDay = store.bookings.filter((booking) => booking.channel === channel
-        && booking.date === date && booking.status !== "cancelled");
+        && booking.date === date && !["cancelled", "rejected", "no_show"].includes(booking.status));
       if (sameDay.some((booking) => startMinutes < booking.endMinutes && endMinutes > booking.startMinutes)) {
         sendJson(res, 409, { error: "هذا الوقت محجوز للاستوديو؛ اختر موعداً آخر." });
         return null;
@@ -1011,19 +1013,19 @@ async function handleApi(req, res, url) {
         durationMinutes,
         episodeNumber,
         coParticipant,
-        status: "booked",
+        status: "pending_approval",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       store.bookings.push(booking);
-      appendAudit("booking-created", user, { bookingId: booking.id, channel, programName: program.name, date, startTime });
+      appendAudit("booking-requested", user, { bookingId: booking.id, channel, programName: program.name, date, startTime });
       await persist();
       return booking;
     });
     bookingQueue = bookingTask.catch(() => {});
     const result = await bookingTask;
     if (!result) return;
-    const notification = await sendMonitorEmail("حجز جديد للاستوديو", `${user.name} حجز برنامج ${result.programName} يوم ${result.date} من ${result.startTime} إلى ${result.endTime}.`);
+    const notification = await sendMonitorEmail("طلب حجز جديد للاستوديو", `${user.name} طلب حجز برنامج ${result.programName} يوم ${result.date} من ${result.startTime} إلى ${result.endTime}. يرجى مراجعة الطلب في النظام.`, true);
     sendJson(res, 201, { booking: bookingForResponse(result, user), notificationWarning: notification.warning || "" });
     return;
   }
@@ -1043,17 +1045,19 @@ async function handleApi(req, res, url) {
       sendJson(res, 404, { error: "الحجز غير موجود." });
       return;
     }
-    if (booking.userId !== user.id || booking.status !== "booked" || new Date(`${booking.date}T${booking.startTime}:00+02:00`) <= new Date()) {
+    if (booking.userId !== user.id || !["pending_approval", "booked"].includes(booking.status)
+      || new Date(`${booking.date}T${booking.startTime}:00+02:00`) <= new Date()) {
       sendJson(res, 403, { error: "لا يمكن تعديل أو إلغاء هذا الحجز." });
       return;
     }
     if (body.action === "cancel") {
+      const wasPendingApproval = booking.status === "pending_approval";
       booking.status = "cancelled";
       booking.cancelledAt = new Date().toISOString();
       booking.updatedAt = booking.cancelledAt;
       appendAudit("booking-cancelled", user, { bookingId: booking.id, channel, programName: booking.programName, date: booking.date });
       await persist();
-      const notification = await sendMonitorEmail("إلغاء حجز الاستوديو", `${user.name} ألغى حجز برنامج ${booking.programName} يوم ${booking.date} الساعة ${booking.startTime}.`);
+      const notification = await sendMonitorEmail("إلغاء حجز الاستوديو", `${user.name} ألغى حجز برنامج ${booking.programName} يوم ${booking.date} الساعة ${booking.startTime}.`, wasPendingApproval);
       sendJson(res, 200, { booking, notificationWarning: notification.warning || "" });
       return;
     }
@@ -1084,7 +1088,7 @@ async function handleApi(req, res, url) {
         return null;
       }
       const sameDay = store.bookings.filter((item) => item.id !== booking.id && item.channel === channel
-        && item.date === date && item.status !== "cancelled");
+        && item.date === date && !["cancelled", "rejected", "no_show"].includes(item.status));
       if (sameDay.some((item) => startMinutes < item.endMinutes && endMinutes > item.startMinutes)) {
         sendJson(res, 409, { error: "هذا الوقت محجوز للاستوديو؛ اختر موعداً آخر." });
         return null;
@@ -1108,6 +1112,7 @@ async function handleApi(req, res, url) {
         durationMinutes,
         episodeNumber,
         coParticipant,
+        status: booking.status === "pending_approval" ? "pending_approval" : "booked",
         updatedAt: new Date().toISOString(),
       });
       appendAudit("booking-updated", user, { bookingId: booking.id, channel, programName: program.name, date, startTime });
@@ -1117,7 +1122,7 @@ async function handleApi(req, res, url) {
     bookingQueue = updateTask.catch(() => {});
     const updated = await updateTask;
     if (!updated) return;
-    const notification = await sendMonitorEmail("تم تعديل حجز الاستوديو", `${user.name} عدّل موعد برنامج ${updated.programName} إلى ${updated.date} من ${updated.startTime} إلى ${updated.endTime}.`);
+    const notification = await sendMonitorEmail("تم تعديل حجز الاستوديو", `${user.name} عدّل موعد برنامج ${updated.programName} إلى ${updated.date} من ${updated.startTime} إلى ${updated.endTime}.`, updated.status === "pending_approval");
     sendJson(res, 200, { booking: bookingForResponse(updated, user), notificationWarning: notification.warning || "" });
     return;
   }
@@ -1476,8 +1481,36 @@ async function handleApi(req, res, url) {
       return;
     }
     const booking = store.bookings.find((item) => item.id === bookingReviewMatch[1] && item.channel === channel);
-    if (!booking || !["completed_pending", "booked"].includes(booking.status)) {
+    if (!booking || !["pending_approval", "completed_pending", "booked"].includes(booking.status)) {
       sendJson(res, 404, { error: "الحجز غير موجود أو تمت مراجعته." });
+      return;
+    }
+    if (booking.status === "pending_approval") {
+      if (!["approved", "rejected"].includes(body.status)) {
+        sendJson(res, 400, { error: "يجب تأكيد طلب الحجز أو رفضه." });
+        return;
+      }
+      const reviewer = sessionUser(req);
+      const reason = cleanText(body.reason, 500);
+      if (body.status === "rejected" && !reason) {
+        sendJson(res, 400, { error: "اكتب سبب رفض طلب الحجز." });
+        return;
+      }
+      booking.status = body.status === "approved" ? "booked" : "rejected";
+      booking.reviewedAt = new Date().toISOString();
+      booking.reviewedBy = reviewer.id;
+      booking.reviewedByName = reviewer.name;
+      booking.reviewReason = reason;
+      booking.updatedAt = booking.reviewedAt;
+      appendAudit(`booking-${body.status}`, reviewer, {
+        bookingId: booking.id,
+        channel,
+        programName: booking.programName,
+        date: booking.date,
+        reason,
+      });
+      await persist();
+      sendJson(res, 200, { booking });
       return;
     }
     if (body.status === "approved" && booking.status !== "completed_pending") {

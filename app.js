@@ -376,16 +376,20 @@ function renderPending(entries) {
 async function renderPendingBookings() {
   const { bookings } = await api(`/api/admin/bookings?channel=${encodeURIComponent(currentChannel)}`);
   const container = $("#pending-bookings");
+  const newRequests = bookings.filter((booking) => booking.status === "pending_approval").length;
+  $("#pending-booking-count").textContent = `${newRequests.toLocaleString("ar-LY")} طلبات جديدة`;
   if (!bookings.length) {
-    container.innerHTML = '<div class="empty-state">لا توجد حجوزات منتهية بانتظار المراجعة.</div>';
+    container.innerHTML = '<div class="empty-state">لا توجد طلبات حجز أو تسجيلات بانتظار المراجعة.</div>';
     return;
   }
   container.innerHTML = `<table><thead><tr><th>المشارك</th><th>البرنامج</th><th>الحلقة</th><th>التاريخ والوقت</th><th>المدة</th><th>الحالة</th><th>القرار</th></tr></thead><tbody>${bookings.map((booking) => `
     <tr><td>${escapeHtml(booking.ownerName)}</td><td>${escapeHtml(booking.programName)}</td><td>${booking.episodeNumber}</td>
       <td>${formatDate(booking.date)} · ${booking.startTime}–${booking.endTime}</td><td>${booking.durationMinutes} دقيقة</td>
-      <td>${booking.status === "completed_pending" ? "أكد إتمام التسجيل" : "لم يؤكد بعد"}</td>
+      <td>${booking.status === "pending_approval" ? "طلب موعد جديد"
+        : booking.status === "completed_pending" ? "أكد إتمام التسجيل" : "لم يؤكد إتمام التسجيل"}</td>
       <td><div class="row-actions">
-        ${booking.status === "completed_pending" ? `<button class="button approve" data-booking-review="${booking.id}" data-status="approved" type="button">اعتماد</button>` : ""}
+        ${booking.status === "pending_approval" ? `<button class="button approve" data-booking-review="${booking.id}" data-status="approved" type="button">تأكيد الحجز</button>` : ""}
+        ${booking.status === "completed_pending" ? `<button class="button approve" data-booking-review="${booking.id}" data-status="approved" type="button">اعتماد التسجيل</button>` : ""}
         <button class="button reject" data-booking-review="${booking.id}" data-status="rejected" type="button">رفض</button>
         ${booking.status === "booked" ? `<button class="button subtle" data-booking-review="${booking.id}" data-status="no_show" type="button">لم يحضر</button>` : ""}
       </div></td></tr>`).join("")}</tbody></table>`;
@@ -393,7 +397,7 @@ async function renderPendingBookings() {
     button.addEventListener("click", async () => {
       let reason = "";
       if (button.dataset.status !== "approved") {
-        reason = window.prompt(button.dataset.status === "no_show" ? "أضف ملاحظة عدم الحضور:" : "اكتب سبب رفض التسجيل:");
+        reason = window.prompt(button.dataset.status === "no_show" ? "أضف ملاحظة عدم الحضور:" : "اكتب سبب رفض الحجز أو التسجيل:");
         if (!reason?.trim()) return;
       }
       button.disabled = true;
@@ -714,7 +718,7 @@ function updateBookingSlots() {
     const end = start + duration;
     if (!duration || end > 19 * 60 || dailyMinutes + duration > 120) continue;
     const conflict = bookingData.bookings.some((booking) => booking.date === date
-      && booking.status !== "cancelled" && booking.id !== editingBookingId
+        && !["cancelled", "rejected", "no_show"].includes(booking.status) && booking.id !== editingBookingId
       && start < (booking.endMinutes ?? booking.startTime.split(":").reduce((sum, part, index) => sum + Number(part) * (index ? 1 : 60), 0) + booking.durationMinutes)
       && end > (booking.startMinutes ?? booking.startTime.split(":").reduce((sum, part, index) => sum + Number(part) * (index ? 1 : 60), 0)));
     if (!conflict) {
@@ -735,8 +739,10 @@ function updateBookingSlots() {
 
 function renderBookings() {
   const currentUserBookings = bookingData.bookings.filter((booking) => booking.userId === currentUser.id);
-  const busy = bookingData.bookings.filter((booking) => booking.userId !== currentUser.id && booking.status !== "cancelled");
+  const busy = bookingData.bookings.filter((booking) => booking.userId !== currentUser.id
+    && !["cancelled", "rejected", "no_show"].includes(booking.status));
   const statusLabel = {
+    pending_approval: "بانتظار تأكيد الإدارة",
     booked: "محجوز",
     completed_pending: "بانتظار مراجعة المراقب",
     approved: "تم التسجيل واعتماده",
@@ -752,7 +758,7 @@ function renderBookings() {
         <span class="status ${booking.status === "approved" ? "approved" : booking.status === "rejected" || booking.status === "no_show" ? "rejected" : ""}">${statusLabel[booking.status] || booking.status}</span>
         <div class="entry-meta">${formatDate(booking.date)} · ${booking.startTime}–${booking.endTime} · ${durationLabel(booking.durationMinutes)}<br>المشارك الآخر: ${escapeHtml(booking.coParticipant)}</div>
         <div class="booking-actions">
-          ${booking.status === "booked" && !ended ? `${bookingData.dates.includes(booking.date) ? `<button class="button subtle" data-edit-booking="${booking.id}" type="button">تعديل</button>` : ""}<button class="button reject" data-cancel-booking="${booking.id}" type="button">إلغاء</button>` : ""}
+          ${["pending_approval", "booked"].includes(booking.status) && !ended ? `${bookingData.dates.includes(booking.date) ? `<button class="button subtle" data-edit-booking="${booking.id}" type="button">تعديل</button>` : ""}<button class="button reject" data-cancel-booking="${booking.id}" type="button">إلغاء</button>` : ""}
           ${booking.status === "booked" && ended ? `<button class="button primary" data-complete-booking="${booking.id}" type="button">تأكيد إتمام التسجيل</button>` : ""}
           ${booking.reviewReason ? `<span class="muted">ملاحظة المراجع: ${escapeHtml(booking.reviewReason)}</span>` : ""}
         </div>
@@ -837,6 +843,13 @@ $("#booking-program").addEventListener("change", updateBookingSlots);
 $("#booking-date").addEventListener("change", updateBookingSlots);
 $("#booking-duration").addEventListener("change", updateBookingSlots);
 $("#refresh-bookings").addEventListener("click", () => loadBookingPage().catch((error) => setMessage($("#booking-message"), error.message, true)));
+$("#refresh-booking-reviews").addEventListener("click", () => loadReviewerWorkspace().catch((error) => setMessage($("#admin-message"), error.message, true)));
+window.setInterval(() => {
+  if (["admin", "monitor"].includes(currentUser?.role) && currentChannel && !$("#admin-view").hidden
+    && !$("#pending-bookings").contains(document.activeElement)) {
+    renderPendingBookings().catch((error) => setMessage($("#admin-message"), error.message, true));
+  }
+}, 30000);
 $("#booking-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const formElement = event.currentTarget;
@@ -852,12 +865,17 @@ $("#booking-form").addEventListener("submit", async (event) => {
     editingBookingId = "";
     formElement.reset();
     $("#booking-form").querySelector('[type="submit"]').textContent = "تأكيد الحجز";
-    setMessage($("#booking-message"), result.notificationWarning || (result.booking.status === "booked" ? "تم تثبيت الحجز." : "تم تحديث الحجز."));
+    const confirmation = result.booking.status === "pending_approval"
+      ? "تم إرسال الطلب؛ سيظهر للإدارة العليا بانتظار تأكيد الحجز."
+      : result.booking.status === "booked" ? "تم تثبيت الحجز." : "تم تحديث الحجز.";
+    setMessage($("#booking-message"), `${confirmation} ${result.notificationWarning || ""}`.trim());
     await loadBookingPage();
   } catch (error) {
     setMessage($("#booking-message"), error.message, true);
   }
 });
+
+$("#booking-back").addEventListener("click", () => navigatePage("member"));
 
 $("#proposal-needs-presenter").addEventListener("change", (event) => {
   const label = $("#proposal-presenter-label");

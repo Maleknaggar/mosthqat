@@ -125,7 +125,7 @@
           <div id="pending-entries" class="table-wrap"></div>
         </section>
         <section class="panel review-panel">
-          <div class="section-heading"><div><span class="step">٢</span><h2>مراجعة حجوزات التسجيل</h2></div></div>
+          <div class="section-heading"><div><span class="step">٢</span><h2>طلبات الحجز ومراجعة التسجيل</h2><span class="role-badge" id="pending-booking-count">0 طلبات جديدة</span></div><button class="button subtle" id="refresh-booking-reviews" type="button">تحديث الحجوزات</button></div>
           <div id="pending-bookings" class="table-wrap"></div>
         </section>
         <section id="reports-panel" class="panel report-panel">
@@ -180,7 +180,7 @@
       </section>
       <div class="feature-shell">
       <section id="booking-view" hidden>
-        <div class="page-heading"><div><span class="eyebrow">جدولة الاستوديو</span><h1>حجز موعد تسجيل</h1><p>احجز موعداً لأحد البرامج المسجلة فقط، لأحد اليومين القادمين. أوقات الاستوديو من السبت إلى الخميس، 1 ظهراً حتى 7 مساءً.</p></div></div>
+        <div class="page-heading"><div><span class="eyebrow">جدولة الاستوديو</span><h1>حجز موعد تسجيل</h1><p>قدّم طلب حجز لأحد البرامج المسجلة في اليومين القادمين. يُثبت الموعد بعد تأكيد الإدارة العليا.</p></div><button class="button subtle" id="booking-back" type="button">رجوع</button></div>
         <div class="workspace-grid">
           <section class="panel">
             <div class="section-heading"><div><span class="step">١</span><h2>بيانات الحجز</h2></div></div>
@@ -191,7 +191,7 @@
               <label>مدة الحجز<select name="durationMinutes" id="booking-duration" required></select></label>
               <label>رقم الحلقة<input name="episodeNumber" type="number" min="1" max="99999" required></label>
               <label id="booking-co-label">اسم المشارك الآخر<input name="coParticipant" maxlength="80" required></label>
-              <p class="muted">الحجز فوري. لا يتجاوز البرنامج ساعتين في اليوم ولا تتداخل المواعيد. يمكنك تعديل/إلغاء الموعد قبل بدايته.</p>
+              <p class="muted">يراجع المسؤول طلب الحجز قبل تثبيت الموعد. لا يتجاوز البرنامج ساعتين في اليوم ولا تتداخل المواعيد؛ ويمكنك تعديل/إلغاء الطلب قبل بدايته.</p>
               <button class="button primary" type="submit">تأكيد الحجز</button>
               <p id="booking-message" class="message" role="status" aria-live="polite"></p>
             </form>
