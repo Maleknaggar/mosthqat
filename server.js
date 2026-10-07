@@ -12,6 +12,7 @@ const { promisify } = require("node:util");
 const Busboy = require("busboy");
 const nodemailer = require("nodemailer");
 const archiver = require("archiver");
+const ExcelJS = require("exceljs");
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require("docx");
 
 const scryptAsync = promisify(scrypt);
@@ -392,6 +393,173 @@ function csvCell(value) {
 
 function csvBuffer(rows) {
   return Buffer.from(`\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`, "utf8");
+}
+
+async function personalDuesWorkbook(entries, person, month, channel) {
+  const workbook = new ExcelJS.Workbook();
+  const [year, monthNumber] = month.split("-").map(Number);
+  const displayedMonth = new Date(Date.UTC(year, monthNumber - 1, 1))
+    .toLocaleDateString("ar-LY", { month: "long", year: "numeric", timeZone: "UTC" });
+  workbook.creator = "دار الإفتاء الليبية";
+  workbook.subject = `كشف مستحقات ${person.name} لشهر ${month}`;
+  workbook.created = new Date();
+  workbook.modified = workbook.created;
+  const report = workbook.addWorksheet("كشف المستحقات", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 10 }],
+    pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 1, horizontalDpi: 300, verticalDpi: 300 },
+    pageMargins: { left: 0.35, right: 0.35, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  });
+  report.columns = [
+    { width: 8 },
+    { width: 38 },
+    { width: 17 },
+    { width: 20 },
+    { width: 22 },
+  ];
+  report.mergeCells("A1:E1");
+  report.getCell("A1").value = "بسم الله الرحمن الرحيم";
+  report.getCell("A1").font = { name: "Arial", size: 18, bold: true, color: { argb: "FF174C3D" } };
+  report.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+  report.getRow(1).height = 34;
+  report.mergeCells("A2:E2");
+  report.getCell("A2").value = "دار الإفتاء الليبية · نظام مستحقات البرامج";
+  report.getCell("A2").font = { name: "Arial", size: 12, bold: true, color: { argb: "FF53665D" } };
+  report.getCell("A2").alignment = { horizontal: "center" };
+  report.mergeCells("A3:E3");
+  report.getCell("A3").value = `تاريخ إصدار الكشف: ${dateInLibya()}    ·    القناة: ${channel === "radio" ? "إذاعة دار الإفتاء" : "القناة المرئية"}`;
+  report.getCell("A3").font = { name: "Arial", size: 10, color: { argb: "FF53665D" } };
+  report.getCell("A3").alignment = { horizontal: "center" };
+  report.mergeCells("A5:E5");
+  report.getCell("A5").value = "السيد/ مدير إدارة الشؤون الإدارية والمالية حفظه الله.";
+  report.getCell("A5").font = { name: "Arial", size: 13, bold: true };
+  report.getCell("A5").alignment = { horizontal: "right" };
+  report.mergeCells("A6:E6");
+  report.getCell("A6").value = "تحية طيبة وبعد،";
+  report.getCell("A6").font = { name: "Arial", size: 12 };
+  report.getCell("A6").alignment = { horizontal: "right" };
+  report.mergeCells("A7:E7");
+  report.getCell("A7").value = "السلام عليكم ورحمة الله وبركاته،";
+  report.getCell("A7").font = { name: "Arial", size: 12 };
+  report.getCell("A7").alignment = { horizontal: "right" };
+  report.mergeCells("A8:E8");
+  report.getCell("A8").value = `نحيل إليكم جدول مستحقات ${channel === "radio" ? "إذاعة دار الإفتاء الليبية" : "القناة المرئية"} لـ${person.role === "sheikh" ? "الشيخ" : "السيد"} ${person.name} عن شهر ${displayedMonth}، وذلك وفق التفصيل المعتمد أدناه.`;
+  report.getCell("A8").font = { name: "Arial", size: 12 };
+  report.getCell("A8").alignment = { horizontal: "right", vertical: "middle", wrapText: true };
+  report.getRow(8).height = 42;
+  report.mergeCells("A9:E9");
+  report.getCell("A9").value = "تفصيل المستحقات حسب البرنامج";
+  report.getCell("A9").font = { name: "Arial", size: 12, bold: true, color: { argb: "FF174C3D" } };
+  report.getCell("A9").alignment = { horizontal: "right" };
+  const tableHeader = report.getRow(10);
+  tableHeader.values = ["ر.م", "اسم البرنامج", "عدد الساعات", "قيمة الساعة (د.ل)", "الإجمالي (د.ل)"];
+  tableHeader.height = 30;
+  tableHeader.eachCell((cell) => {
+    cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF174C3D" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.border = { top: { style: "thin", color: { argb: "FFD3A45A" } }, bottom: { style: "thin", color: { argb: "FFD3A45A" } } };
+  });
+  const grouped = new Map();
+  for (const entry of entries) {
+    const key = `${entry.programId || entry.programName}:${entry.type}:${entry.hourlyRate}`;
+    const item = grouped.get(key) || { programName: entry.programName, type: entry.type, hourlyRate: entry.hourlyRate, minutes: 0, amount: 0 };
+    item.minutes += entry.durationMinutes;
+    item.amount = Math.round((item.amount + entry.amount + Number.EPSILON) * 100) / 100;
+    grouped.set(key, item);
+  }
+  const totals = [...grouped.values()];
+  totals.forEach((item, index) => {
+    const row = report.addRow([
+      index + 1,
+      `${item.programName} · ${item.type === "recorded" ? "مسجل" : "مباشر"}`,
+      item.minutes / 60,
+      item.hourlyRate,
+      item.amount,
+    ]);
+    row.height = 24;
+    row.eachCell((cell, column) => {
+      cell.font = { name: "Arial", size: 11, color: { argb: "FF263B32" } };
+      cell.alignment = { horizontal: column === 2 ? "right" : "center", vertical: "middle" };
+      cell.border = { bottom: { style: "hair", color: { argb: "FFDDE6DF" } } };
+      if (index % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F7F3" } };
+    });
+    row.getCell(3).numFmt = '0.00 "ساعة"';
+    row.getCell(4).numFmt = '#,##0.00';
+    row.getCell(5).numFmt = '#,##0.00';
+  });
+  const totalAmount = totals.reduce((sum, item) => Math.round((sum + item.amount + Number.EPSILON) * 100) / 100, 0);
+  const totalRow = report.addRow(["", "الإجمالي العام", "", "", totalAmount]);
+  totalRow.height = 30;
+  totalRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.font = { name: "Arial", size: 12, bold: true, color: { argb: "FF174C3D" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE9F1EB" } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = { top: { style: "medium", color: { argb: "FFD3A45A" } } };
+  });
+  totalRow.getCell(5).numFmt = '#,##0.00 "د.ل"';
+  const closingRow = report.rowCount + 2;
+  report.mergeCells(`A${closingRow}:E${closingRow}`);
+  report.getCell(`A${closingRow}`).value = "وتفضلوا بقبول فائق الاحترام والتقدير.";
+  report.getCell(`A${closingRow}`).font = { name: "Arial", size: 12 };
+  report.getCell(`A${closingRow}`).alignment = { horizontal: "right" };
+  const signoffRow = closingRow + 2;
+  report.mergeCells(`A${signoffRow}:E${signoffRow}`);
+  report.getCell(`A${signoffRow}`).value = "مدير قسم الإعلام";
+  report.getCell(`A${signoffRow}`).font = { name: "Arial", size: 12, bold: true, color: { argb: "FF174C3D" } };
+  report.getCell(`A${signoffRow}`).alignment = { horizontal: "right" };
+  report.mergeCells(`A${signoffRow + 1}:E${signoffRow + 1}`);
+  report.getCell(`A${signoffRow + 1}`).value = "مجدي قدمور";
+  report.getCell(`A${signoffRow + 1}`).font = { name: "Arial", size: 12, bold: true };
+  report.getCell(`A${signoffRow + 1}`).alignment = { horizontal: "right" };
+  report.pageSetup.printArea = `A1:E${signoffRow + 1}`;
+
+  const detail = workbook.addWorksheet("تفاصيل المشاركات", {
+    views: [{ rightToLeft: true, state: "frozen", ySplit: 4 }],
+    pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    pageMargins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.15, footer: 0.15 },
+  });
+  detail.columns = [
+    { width: 7 }, { width: 28 }, { width: 13 }, { width: 14 }, { width: 14 },
+    { width: 17 }, { width: 17 }, { width: 14 }, { width: 24 },
+  ];
+  detail.mergeCells("A1:I1");
+  detail.getCell("A1").value = `تفاصيل المشاركات المعتمدة · ${person.name} · ${month}`;
+  detail.getCell("A1").font = { name: "Arial", size: 15, bold: true, color: { argb: "FF174C3D" } };
+  detail.getCell("A1").alignment = { horizontal: "center" };
+  detail.mergeCells("A2:I2");
+  detail.getCell("A2").value = `القناة: ${channel === "radio" ? "إذاعة دار الإفتاء" : "القناة المرئية"} · عدد المشاركات: ${entries.length}`;
+  detail.getCell("A2").font = { name: "Arial", size: 11, color: { argb: "FF53665D" } };
+  detail.getCell("A2").alignment = { horizontal: "center" };
+  detail.addRow([]);
+  const detailHeader = detail.addRow(["ر.م", "البرنامج", "النوع", "رقم الحلقة", "تاريخ البرنامج", "المدة (دقيقة)", "سعر الساعة (د.ل)", "المستحق (د.ل)", "تاريخ الاعتماد · المراجع"]);
+  detailHeader.height = 30;
+  detailHeader.eachCell((cell) => {
+    cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF174C3D" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  });
+  entries.forEach((entry, index) => {
+    const row = detail.addRow([
+      index + 1,
+      entry.programName,
+      entry.type === "recorded" ? "مسجل" : "مباشر",
+      entry.episodeNumber,
+      entry.date,
+      entry.durationMinutes,
+      entry.hourlyRate,
+      entry.amount,
+      `${entry.reviewedAt || ""} · ${entry.reviewerName || "الإدارة العليا"}`,
+    ]);
+    row.eachCell((cell, column) => {
+      cell.font = { name: "Arial", size: 10, color: { argb: "FF263B32" } };
+      cell.alignment = { horizontal: column === 2 || column === 9 ? "right" : "center", vertical: "middle" };
+      cell.border = { bottom: { style: "hair", color: { argb: "FFDDE6DF" } } };
+      if (index % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F7F3" } };
+    });
+  });
+  detail.autoFilter = { from: "A4", to: `I${detail.rowCount}` };
+  detail.pageSetup.printArea = `A1:I${detail.rowCount}`;
+  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
 async function makeCorrectionDocument(episode, request) {
@@ -1881,9 +2049,9 @@ async function handleApi(req, res, url) {
       return;
     }
     const files = store.archiveFiles.filter((item) => item.month === month && (item.channel || "radio") === channel)
-      .map(({ id, name, kind, month: fileMonth, createdAt, episodeId, correctionId, category, channel: fileChannel, proposalTitle, authorName }) => ({
+      .map(({ id, name, kind, month: fileMonth, createdAt, episodeId, correctionId, category, channel: fileChannel, proposalTitle, authorName, reportType, reportPersonName }) => ({
         id, name, kind, month: fileMonth, createdAt, episodeId, correctionId, category, channel: fileChannel || "radio",
-        proposalTitle, authorName, downloadUrl: `/api/archive/${id}?channel=${channel}`,
+        proposalTitle, authorName, reportType, reportPersonName, downloadUrl: `/api/archive/${id}?channel=${channel}`,
       }));
     const decisions = store.auditEvents.filter((event) => event.createdAt.slice(0, 7) === month
       && (event.channel || "radio") === channel && isDecisionEvent(event));
@@ -1918,7 +2086,9 @@ async function handleApi(req, res, url) {
     }
     const mime = archiveFile.kind === "word"
       ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      : "text/csv; charset=utf-8";
+      : archiveFile.kind === "xlsx"
+        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : "text/csv; charset=utf-8";
     await fs.access(archiveFile.path);
     await sendProtectedFile(req, res, archiveFile.path, mime, archiveFile.name, true);
     return;
@@ -1930,11 +2100,24 @@ async function handleApi(req, res, url) {
     const month = archiveZipMatch[1];
     const channel = requestChannel(url, res);
     if (!channel) return;
-    const files = store.archiveFiles.filter((item) => item.month === month && (item.channel || "radio") === channel);
+    const category = url.searchParams.get("category") || "all";
+    const validCategories = ["all", "program-proposal", "dues-report", "episode-correction", "other"];
+    if (!validCategories.includes(category)) {
+      sendJson(res, 400, { error: "نوع حزمة الأرشيف غير صحيح." });
+      return;
+    }
+    const files = store.archiveFiles.filter((item) => item.month === month && (item.channel || "radio") === channel
+      && (category === "all" || (category === "other"
+        ? !["program-proposal", "dues-report", "episode-correction"].includes(item.category)
+        : item.category === category)));
+    if (!files.length && category !== "all") {
+      sendJson(res, 404, { error: "لا توجد ملفات من هذا النوع في الأرشيف للشهر المحدد." });
+      return;
+    }
     await Promise.all(files.map((file) => fs.access(file.path)));
     res.writeHead(200, {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="archive-${channel}-${month}.zip"`,
+      "Content-Disposition": `attachment; filename="archive-${channel}-${month}-${category}.zip"`,
       "Cache-Control": "private, no-store",
     });
     const zip = archiver("zip", { zlib: { level: 6 } });
@@ -1947,13 +2130,61 @@ async function handleApi(req, res, url) {
     for (const file of files) {
       zip.file(file.path, { name: file.name });
     }
-    const decisions = store.auditEvents.filter((event) => event.createdAt.slice(0, 7) === month
-      && (event.channel || "radio") === channel && isDecisionEvent(event));
-    zip.append(csvBuffer([
-      ["نوع القرار", "اسم المراجع", "التاريخ", "البرنامج", "السبب"],
-      ...decisions.map((event) => [event.action, event.actorName, event.createdAt, event.programName || "", event.reason || ""]),
-    ]), { name: `قرارات-المراجعة-${month}.csv` });
+    if (category === "all") {
+      const decisions = store.auditEvents.filter((event) => event.createdAt.slice(0, 7) === month
+        && (event.channel || "radio") === channel && isDecisionEvent(event));
+      zip.append(csvBuffer([
+        ["نوع القرار", "اسم المراجع", "التاريخ", "البرنامج", "السبب"],
+        ...decisions.map((event) => [event.action, event.actorName, event.createdAt, event.programName || "", event.reason || ""]),
+      ]), { name: `قرارات-المراجعة-${month}.csv` });
+    }
     await zip.finalize();
+    return;
+  }
+
+  if (req.method === "POST" && route === "/api/admin/report/export-person") {
+    if (!requireAdmin(req, res)) return;
+    const body = await readJson(req);
+    const channel = requestBodyChannel(body, res);
+    if (!channel) return;
+    const month = cleanText(body.month, 7);
+    const userId = cleanText(body.userId, 64);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !userId) {
+      sendJson(res, 400, { error: "اختر الشهر والمشارك لإعداد كشف Excel." });
+      return;
+    }
+    const person = store.users.find((user) => user.id === userId);
+    if (!person) {
+      sendJson(res, 404, { error: "المشارك المحدد غير موجود." });
+      return;
+    }
+    const entries = store.entries.filter((entry) => entryChannel(entry) === channel
+      && entry.status === "approved" && entry.date.startsWith(month) && entry.userId === userId)
+      .map(entryForResponse)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.programName.localeCompare(b.programName, "ar"));
+    if (!entries.length) {
+      sendJson(res, 404, { error: "لا توجد مستحقات معتمدة لهذا المشارك في الشهر المحدد." });
+      return;
+    }
+    const buffer = await personalDuesWorkbook(entries, person, month, channel);
+    const safeName = person.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, "-").slice(0, 60) || "مشارك";
+    const file = await saveArchiveFile({
+      name: `كشف-مستحقات-${safeName}-${month}.xlsx`,
+      kind: "xlsx",
+      month,
+      buffer,
+      details: {
+        category: "dues-report",
+        reportType: "personal-xlsx",
+        reportPersonId: person.id,
+        reportPersonName: person.name,
+        channel,
+      },
+    });
+    sendJson(res, 200, {
+      file: { id: file.id, name: file.name, downloadUrl: `/api/archive/${file.id}?channel=${channel}` },
+      message: "تم إنشاء كشف Excel وحفظه في أرشيف الشهر.",
+    });
     return;
   }
 

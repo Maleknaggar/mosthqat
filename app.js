@@ -425,6 +425,7 @@ function renderReport(report) {
     <div class="summary-card"><span>المشارك المحدد</span><strong class="summary-label">${escapeHtml(userLabel)}</strong></div>
     <div class="summary-card"><span>عدد المشاركات المعتمدة</span><strong>${report.entries.length.toLocaleString("ar-LY")}</strong></div>`;
   const container = $("#report-table");
+  updatePersonalReportButton();
   if (!report.programTotals.length) {
     container.innerHTML = '<div class="empty-state">لا توجد مستحقات معتمدة للشهر والمشارك المحددين.</div>';
     return;
@@ -432,6 +433,12 @@ function renderReport(report) {
   container.innerHTML = `<table><thead><tr><th>المشارك</th><th>البرنامج</th><th>عدد المشاركات</th><th>الإجمالي</th></tr></thead><tbody>${report.programTotals.map((item) => `
     <tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.programName)}</td><td>${item.count}</td><td><strong>${money(item.amount)}</strong></td></tr>
   `).join("")}</tbody></table>`;
+}
+
+function updatePersonalReportButton() {
+  const participantId = $("#report-user").value;
+  const hasApprovedEntries = Boolean(participantId && latestReport?.entries.some((entry) => entry.userId === participantId));
+  $("#export-person-xlsx").disabled = !hasApprovedEntries;
 }
 
 function reportUrl() {
@@ -503,6 +510,7 @@ async function exportReport(type) {
         month: latestReport.month, userId: $("#report-user").value, type, channel: currentChannel,
       }),
     });
+    $("#archive-month").value = latestReport.month;
     const link = document.createElement("a");
     link.href = file.downloadUrl;
     link.download = file.name;
@@ -561,6 +569,31 @@ function printReport(detail) {
 
 $("#export-summary").addEventListener("click", exportSummary);
 $("#export-details").addEventListener("click", exportDetails);
+$("#export-person-xlsx").addEventListener("click", async () => {
+  const userId = $("#report-user").value;
+  if (!userId || !latestReport?.entries.some((entry) => entry.userId === userId)) {
+    setMessage($("#admin-message"), "اختر مشاركاً لديه مستحقات معتمدة أولاً.", true);
+    return;
+  }
+  const button = $("#export-person-xlsx");
+  button.disabled = true;
+  try {
+    const { file } = await api("/api/admin/report/export-person", {
+      method: "POST",
+      body: JSON.stringify({ month: latestReport.month, userId, channel: currentChannel }),
+    });
+    $("#archive-month").value = latestReport.month;
+    const link = document.createElement("a");
+    link.href = file.downloadUrl;
+    link.download = file.name;
+    link.click();
+    setMessage($("#admin-message"), "تم إنشاء كشف Excel بتنسيق رسمي وحفظه في أرشيف الشهر.");
+  } catch (error) {
+    setMessage($("#admin-message"), error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
 $("#print-summary").addEventListener("click", () => printReport(false));
 $("#print-details").addEventListener("click", () => printReport(true));
 
@@ -1063,15 +1096,38 @@ async function loadArchive() {
   $("#archive-channel-label").textContent = channelNames[channel];
   const { files, decisions } = await api(`/api/admin/archive?month=${encodeURIComponent(month)}&channel=${encodeURIComponent(channel)}`);
   const proposals = files.filter((file) => file.category === "program-proposal");
-  const records = files.filter((file) => file.category !== "program-proposal");
+  const duesReports = files.filter((file) => file.category === "dues-report");
+  const corrections = files.filter((file) => file.category === "episode-correction");
+  const otherFiles = files.filter((file) => !["program-proposal", "dues-report", "episode-correction"].includes(file.category));
+  const categoryCounts = {
+    all: files.length || decisions.length,
+    "program-proposal": proposals.length,
+    "dues-report": duesReports.length,
+    "episode-correction": corrections.length,
+    other: otherFiles.length,
+  };
+  document.querySelectorAll("[data-archive-zip]").forEach((button) => {
+    button.disabled = !categoryCounts[button.dataset.archiveZip];
+  });
+  $("#archive-dues-count").textContent = `${duesReports.length.toLocaleString("ar-LY")} ملفات`;
+  $("#archive-corrections-count").textContent = `${corrections.length.toLocaleString("ar-LY")} ملفات`;
+  $("#archive-proposals-count").textContent = `${proposals.length.toLocaleString("ar-LY")} ملفات`;
+  $("#archive-other-count").textContent = `${otherFiles.length.toLocaleString("ar-LY")} ملفات`;
+  $("#archive-decisions-count").textContent = `${decisions.length.toLocaleString("ar-LY")} قرارات`;
   $("#archive-proposals").innerHTML = proposals.length
     ? `<table><thead><tr><th>اسم البرنامج المقترح</th><th>مقدم المقترح</th><th>تاريخ الحفظ</th><th>الخطاب</th></tr></thead><tbody>${proposals.map((file) => `
       <tr><td>${escapeHtml(file.proposalTitle || file.name)}</td><td>${escapeHtml(file.authorName || "—")}</td><td>${formatDateTime(file.createdAt)}</td><td><a class="archive-download" href="${escapeHtml(file.downloadUrl)}">تنزيل Word</a></td></tr>`).join("")}</tbody></table>`
     : '<div class="empty-state">لا توجد مقترحات محفوظة لهذه القناة في هذا الشهر.</div>';
-  $("#archive-files").innerHTML = records.length
-    ? `<table><thead><tr><th>الملف</th><th>النوع</th><th>تاريخ الحفظ</th><th>تنزيل</th></tr></thead><tbody>${records.map((file) => `
-      <tr><td>${escapeHtml(file.name)}</td><td>${file.kind === "word" ? "محضر Word" : "كشف CSV متوافق مع Excel"}</td><td>${formatDateTime(file.createdAt)}</td><td><a class="archive-download" href="${escapeHtml(file.downloadUrl)}">تنزيل</a></td></tr>`).join("")}</tbody></table>`
-    : '<div class="empty-state">لا توجد ملفات محفوظة لهذا الشهر بعد.</div>';
+  const renderArchiveFiles = (items, emptyMessage, typeLabel) => items.length
+    ? `<table><thead><tr><th>المشارك / الملف</th><th>نوع الملف</th><th>تاريخ الحفظ</th><th>تنزيل</th></tr></thead><tbody>${items.map((file) => `
+      <tr><td>${escapeHtml(file.reportPersonName || file.name)}</td><td>${typeLabel(file)}</td><td>${formatDateTime(file.createdAt)}</td><td><a class="archive-download" href="${escapeHtml(file.downloadUrl)}">تنزيل الملف</a></td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty-state">${emptyMessage}</div>`;
+  $("#archive-dues").innerHTML = renderArchiveFiles(duesReports, "لا توجد كشوف مستحقات محفوظة لهذا الشهر. أنشئ كشف Excel من صفحة التقارير وسيُحفظ هنا تلقائياً.", (file) => {
+    if (file.kind === "xlsx") return "كشف مستحقات Excel منسق";
+    return file.reportType === "details" ? "تفصيل CSV متوافق مع Excel" : "إجمالي CSV متوافق مع Excel";
+  });
+  $("#archive-corrections").innerHTML = renderArchiveFiles(corrections, "لا توجد محاضر تعديل محفوظة لهذا الشهر.", () => "محضر تعديل Word");
+  $("#archive-other").innerHTML = renderArchiveFiles(otherFiles, "لا توجد ملفات أخرى لهذا الشهر.", (file) => file.kind === "word" ? "ملف Word" : file.kind === "xlsx" ? "ملف Excel" : "ملف CSV");
   $("#archive-decisions").innerHTML = decisions.length
     ? `<table><thead><tr><th>القرار</th><th>المراجع</th><th>التاريخ</th><th>البرنامج</th><th>السبب/الملاحظة</th></tr></thead><tbody>${decisions.map((decision) => `
       <tr><td>${escapeHtml(decision.action)}</td><td>${escapeHtml(decision.actorName)}</td><td>${formatDateTime(decision.createdAt)}</td><td>${escapeHtml(decision.programName || "—")}</td><td>${escapeHtml(decision.reason || "—")}</td></tr>`).join("")}</tbody></table>`
@@ -1082,10 +1138,10 @@ $("#archive-filter").addEventListener("submit", (event) => {
   event.preventDefault();
   loadArchive().catch((error) => setMessage($("#archive-message"), error.message, true));
 });
-$("#archive-zip").addEventListener("click", () => {
+document.querySelectorAll("[data-archive-zip]").forEach((button) => button.addEventListener("click", () => {
   const month = $("#archive-month").value;
-  if (month) window.location.href = `/api/admin/archive/${encodeURIComponent(month)}.zip?channel=${encodeURIComponent(currentChannel)}`;
-});
+  if (month) window.location.href = `/api/admin/archive/${encodeURIComponent(month)}.zip?channel=${encodeURIComponent(currentChannel)}&category=${encodeURIComponent(button.dataset.archiveZip)}`;
+}));
 
 async function loadAccountSettings() {
   const { account } = await api("/api/account");

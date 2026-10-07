@@ -140,6 +140,7 @@
           <div class="report-actions">
             <button class="button subtle" id="export-summary" type="button">تصدير إجمالي البرامج إلى Excel</button>
             <button class="button subtle" id="export-details" type="button">تصدير التفصيل إلى Excel</button>
+            <button class="button subtle" id="export-person-xlsx" type="button" disabled>كشف Excel للمشارك وحفظه في الأرشيف</button>
             <button class="button subtle" id="print-summary" type="button">طباعة الإجمالي</button>
             <button class="button primary" id="print-details" type="button">طباعة التفصيل</button>
           </div>
@@ -264,11 +265,35 @@
             <label>السنة والشهر<input id="archive-month" name="month" type="month" required></label>
             <span id="archive-channel-label" class="role-badge"></span>
             <button class="button primary" type="submit">عرض الأرشيف</button>
-            <button class="button subtle" id="archive-zip" type="button">تنزيل ملفات الشهر ZIP</button>
           </form>
-          <h2>مقترحات البرامج</h2><div id="archive-proposals" class="table-wrap"></div>
-          <h2>كشوف المستحقات ومحاضر Word</h2><div id="archive-files" class="table-wrap"></div>
-          <h2>قرارات المراجعة</h2><div id="archive-decisions" class="table-wrap"></div>
+          <p class="muted">اختر شهر التقرير والقناة. يُحفظ كشف المستحقات في هذا الأرشيف عند إنشائه من صفحة التقارير.</p>
+          <div class="archive-download-actions" aria-label="تنزيل ملفات الأرشيف حسب النوع">
+            <button class="button subtle" data-archive-zip="dues-report" type="button">تنزيل كشوف المستحقات ZIP</button>
+            <button class="button subtle" data-archive-zip="program-proposal" type="button">تنزيل المقترحات ZIP</button>
+            <button class="button subtle" data-archive-zip="episode-correction" type="button">تنزيل محاضر التعديل ZIP</button>
+            <button class="button subtle" data-archive-zip="other" type="button">تنزيل الملفات الأخرى ZIP</button>
+            <button class="button subtle" data-archive-zip="all" type="button">تنزيل الأرشيف كاملاً ZIP</button>
+          </div>
+          <section class="archive-section">
+            <div class="section-heading"><h2>كشوف المستحقات</h2><span id="archive-dues-count" class="role-badge">0 ملفات</span></div>
+            <div id="archive-dues" class="table-wrap"></div>
+          </section>
+          <section class="archive-section">
+            <div class="section-heading"><h2>محاضر تعديل الحلقات</h2><span id="archive-corrections-count" class="role-badge">0 ملفات</span></div>
+            <div id="archive-corrections" class="table-wrap"></div>
+          </section>
+          <section class="archive-section">
+            <div class="section-heading"><h2>مقترحات البرامج</h2><span id="archive-proposals-count" class="role-badge">0 ملفات</span></div>
+            <div id="archive-proposals" class="table-wrap"></div>
+          </section>
+          <section class="archive-section">
+            <div class="section-heading"><h2>ملفات أخرى</h2><span id="archive-other-count" class="role-badge">0 ملفات</span></div>
+            <div id="archive-other" class="table-wrap"></div>
+          </section>
+          <section class="archive-section">
+            <div class="section-heading"><h2>قرارات المراجعة</h2><span id="archive-decisions-count" class="role-badge">0 قرارات</span></div>
+            <div id="archive-decisions" class="table-wrap"></div>
+          </section>
           <p id="archive-message" class="message" role="status" aria-live="polite"></p>
         </section>
       </section>
